@@ -30,8 +30,24 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# Environment variables - NEVER COMMIT THESE
+.env
+.env.local
+.env.development
+.env.production
 .env*.local
+!.env.example
+
+# API Keys and Secrets
+secrets/
+*.secret
+*credentials*.json
+serviceAccountKey.json
+
+# Supabase
+supabase/.temp/
+supabase/.branches/
+.supabase/
 
 # typescript
 *.tsbuildinfo
@@ -39,3 +55,24 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Build artifacts
+*.log
+coverage/
+
+# Temporary files
+tmp/
+temp/
+
+# Claude Code
+.claude/
