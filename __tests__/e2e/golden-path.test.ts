@@ -13,22 +13,23 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Test configuration
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 const TEST_USER_EMAIL = `test-${Date.now()}@roadledger-test.com`;
 const TEST_USER_PASSWORD = 'TestPassword123!';
 
-describe('Golden Path E2E Tests', () => {
+// Skip E2E tests if environment variables are not set
+const shouldSkip = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+const describeOrSkip = shouldSkip ? describe.skip : describe;
+
+describeOrSkip('Golden Path E2E Tests', () => {
   let supabase: SupabaseClient;
   let userId: string;
   let sessionToken: string;
 
   beforeAll(() => {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      throw new Error('Missing test environment variables');
-    }
-    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
   });
 
   afterAll(async () => {
