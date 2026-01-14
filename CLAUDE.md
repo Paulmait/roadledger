@@ -260,12 +260,25 @@ Track frequently run routes with profitability stats.
 - Average rate, best rate, avg profit per lane
 - Preferred brokers per lane
 
+## App Store Assets
+
+All assets are in `assets/appstore/`:
+
+| Asset | File | Size |
+|-------|------|------|
+| App Icon | AppIcon-1024x1024.png | 1024x1024 |
+| iPhone 6.5" (5) | iPhone-6.5-*.png | 1284x2778 |
+| iPhone 5.5" (5) | iPhone-5.5-*.png | 1242x2208 |
+| iPad 12.9" (1) | iPad-12.9-*.png | 2048x2732 |
+
+**Full submission guide:** See `APP_STORE_SUBMISSION.md`
+
 ## Remaining Tasks for Launch (Jan 16, 2026)
 
 ### High Priority
+- [x] Create App Store screenshots and icon
 - [ ] Deploy all edge functions to Supabase
-- [ ] Configure Apple App Store Connect (product IDs, screenshots)
-- [ ] Set up production environment variables
+- [ ] Upload build to App Store Connect
 - [ ] Final end-to-end testing on physical devices
 
 ### Medium Priority
