@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,14 +6,48 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useProfile, useAuthStore } from '@/stores/authStore';
 import { useTripStore, useActiveTrip, useIsTracking } from '@/stores/tripStore';
 import { useSyncStore, useIsOnline, useSyncStatus } from '@/stores/syncStore';
 import { getUserTransactions, getUserTrips } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
 import type { Transaction, Trip } from '@/types/database.types';
 import { format } from 'date-fns';
+
+// Brand colors
+const COLORS = {
+  primary: '#1E3A5F',
+  secondary: '#2ECC71',
+  accent: '#F39C12',
+  background: '#0D1B2A',
+  surface: '#1B2838',
+  surfaceLight: '#243447',
+  text: '#FFFFFF',
+  textSecondary: '#8892A0',
+  profit: '#2ECC71',
+  loss: '#E74C3C',
+  warning: '#F39C12',
+};
+
+interface AIInsight {
+  type: 'warning' | 'opportunity' | 'achievement' | 'tip';
+  title: string;
+  message: string;
+  impact?: string;
+  action?: string;
+}
+
+interface ProfitMetrics {
+  grossRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
+  totalMiles: number;
+  profitPerMile: number;
+  profitPerDay: number;
+}
 
 export default function DashboardScreen() {
   const profile = useProfile();
@@ -26,15 +60,14 @@ export default function DashboardScreen() {
   const checkNetworkStatus = useSyncStore((state) => state.checkNetworkStatus);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingInsights, setLoadingInsights] = useState(false);
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
-  const [stats, setStats] = useState({
-    totalMilesThisMonth: 0,
-    totalExpensesThisMonth: 0,
-    totalIncomeThisMonth: 0,
-  });
+  const [profitMetrics, setProfitMetrics] = useState<ProfitMetrics | null>(null);
+  const [aiInsights, setAiInsights] = useState<AIInsight[]>([]);
+  const [aiNarrative, setAiNarrative] = useState<string>('');
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     if (!user?.id) return;
 
     try {
@@ -46,7 +79,7 @@ export default function DashboardScreen() {
       const transactions = await getUserTransactions(user.id, { limit: 5 });
       setRecentTransactions(transactions);
 
-      // Calculate this month's stats
+      // Calculate this month's profit metrics
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
         .toISOString()
@@ -68,6 +101,8 @@ export default function DashboardScreen() {
         .filter((t) => t.type === 'income')
         .reduce((sum, t) => sum + t.amount, 0);
 
+      const netProfit = income - expenses;
+
       // Calculate miles from finalized trips this month
       const monthTrips = trips.filter((t) => {
         const tripDate = new Date(t.started_at);
@@ -82,24 +117,71 @@ export default function DashboardScreen() {
         0
       );
 
-      setStats({
-        totalMilesThisMonth: totalMiles,
-        totalExpensesThisMonth: expenses,
-        totalIncomeThisMonth: income,
+      const daysInMonth = now.getDate();
+
+      setProfitMetrics({
+        grossRevenue: income,
+        totalExpenses: expenses,
+        netProfit,
+        totalMiles,
+        profitPerMile: totalMiles > 0 ? netProfit / totalMiles : 0,
+        profitPerDay: daysInMonth > 0 ? netProfit / daysInMonth : 0,
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     }
-  };
+  }, [user?.id]);
+
+  const loadAIInsights = useCallback(async () => {
+    if (!user?.id || !isOnline) return;
+
+    setLoadingInsights(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!token) return;
+
+      // Call AI profit analyzer
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-profit-analyzer`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ analysisType: 'weekly' }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setAiInsights(data.insights || []);
+        setAiNarrative(data.aiNarrative || '');
+      }
+    } catch (error) {
+      console.error('Failed to load AI insights:', error);
+    } finally {
+      setLoadingInsights(false);
+    }
+  }, [user?.id, isOnline]);
 
   useEffect(() => {
     loadDashboardData();
     checkNetworkStatus();
-  }, [user?.id]);
+  }, [loadDashboardData, checkNetworkStatus]);
+
+  useEffect(() => {
+    if (isOnline) {
+      loadAIInsights();
+    }
+  }, [isOnline, loadAIInsights]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadDashboardData();
+    await loadAIInsights();
     await checkNetworkStatus();
     setRefreshing(false);
   };
@@ -107,6 +189,26 @@ export default function DashboardScreen() {
   const handleSignOut = async () => {
     await signOut();
     router.replace('/(auth)/login');
+  };
+
+  const getInsightIcon = (type: AIInsight['type']) => {
+    switch (type) {
+      case 'warning': return '⚠️';
+      case 'opportunity': return '💡';
+      case 'achievement': return '🏆';
+      case 'tip': return '💰';
+      default: return '📊';
+    }
+  };
+
+  const getInsightColor = (type: AIInsight['type']) => {
+    switch (type) {
+      case 'warning': return COLORS.loss;
+      case 'opportunity': return COLORS.accent;
+      case 'achievement': return COLORS.profit;
+      case 'tip': return COLORS.secondary;
+      default: return COLORS.textSecondary;
+    }
   };
 
   return (
@@ -117,7 +219,7 @@ export default function DashboardScreen() {
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          tintColor="#4f46e5"
+          tintColor={COLORS.secondary}
         />
       }
     >
@@ -125,7 +227,7 @@ export default function DashboardScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>
-            Welcome back{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}
+            {profile?.full_name ? `${profile.full_name.split(' ')[0]}` : 'Dashboard'}
           </Text>
           <Text style={styles.companyName}>
             {profile?.company_name || 'Set up your profile'}
@@ -140,8 +242,68 @@ export default function DashboardScreen() {
       <View style={styles.statusBar}>
         <View style={[styles.statusDot, isOnline ? styles.online : styles.offline]} />
         <Text style={styles.statusText}>
-          {isOnline ? 'Online' : 'Offline'} - {syncStatus}
+          {isOnline ? 'Online' : 'Offline'} • {syncStatus}
         </Text>
+      </View>
+
+      {/* PROFIT-FIRST: Hero Metrics Card */}
+      <View style={styles.profitCard}>
+        <Text style={styles.profitCardTitle}>This Month's Profit</Text>
+        <View style={styles.profitHero}>
+          <Text style={[
+            styles.profitAmount,
+            { color: (profitMetrics?.netProfit || 0) >= 0 ? COLORS.profit : COLORS.loss }
+          ]}>
+            ${(profitMetrics?.netProfit || 0).toLocaleString(undefined, {
+              maximumFractionDigits: 0,
+            })}
+          </Text>
+          <Text style={styles.profitLabel}>NET PROFIT</Text>
+        </View>
+
+        <View style={styles.profitMetricsRow}>
+          <View style={styles.profitMetric}>
+            <Text style={styles.profitMetricValue}>
+              ${(profitMetrics?.profitPerMile || 0).toFixed(2)}
+            </Text>
+            <Text style={styles.profitMetricLabel}>$/mile</Text>
+          </View>
+          <View style={styles.profitMetricDivider} />
+          <View style={styles.profitMetric}>
+            <Text style={styles.profitMetricValue}>
+              ${(profitMetrics?.profitPerDay || 0).toFixed(0)}
+            </Text>
+            <Text style={styles.profitMetricLabel}>$/day</Text>
+          </View>
+          <View style={styles.profitMetricDivider} />
+          <View style={styles.profitMetric}>
+            <Text style={styles.profitMetricValue}>
+              {(profitMetrics?.totalMiles || 0).toLocaleString(undefined, {
+                maximumFractionDigits: 0,
+              })}
+            </Text>
+            <Text style={styles.profitMetricLabel}>miles</Text>
+          </View>
+        </View>
+
+        <View style={styles.revenueExpenseRow}>
+          <View style={styles.revenueBox}>
+            <Text style={styles.revenueLabel}>Revenue</Text>
+            <Text style={styles.revenueValue}>
+              ${(profitMetrics?.grossRevenue || 0).toLocaleString(undefined, {
+                maximumFractionDigits: 0,
+              })}
+            </Text>
+          </View>
+          <View style={styles.expenseBox}>
+            <Text style={styles.expenseLabel}>Expenses</Text>
+            <Text style={styles.expenseValue}>
+              ${(profitMetrics?.totalExpenses || 0).toLocaleString(undefined, {
+                maximumFractionDigits: 0,
+              })}
+            </Text>
+          </View>
+        </View>
       </View>
 
       {/* Active Trip Banner */}
@@ -161,33 +323,46 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Stats Cards */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>
-            {stats.totalMilesThisMonth.toLocaleString(undefined, {
-              maximumFractionDigits: 0,
-            })}
-          </Text>
-          <Text style={styles.statLabel}>Miles This Month</Text>
+      {/* AI Insights */}
+      {(aiInsights.length > 0 || aiNarrative || loadingInsights) && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>AI Insights</Text>
+
+          {loadingInsights ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator color={COLORS.secondary} />
+              <Text style={styles.loadingText}>Analyzing your data...</Text>
+            </View>
+          ) : (
+            <>
+              {aiNarrative ? (
+                <View style={styles.narrativeCard}>
+                  <Text style={styles.narrativeText}>{aiNarrative}</Text>
+                </View>
+              ) : null}
+
+              {aiInsights.slice(0, 3).map((insight, index) => (
+                <View
+                  key={index}
+                  style={[styles.insightCard, { borderLeftColor: getInsightColor(insight.type) }]}
+                >
+                  <View style={styles.insightHeader}>
+                    <Text style={styles.insightIcon}>{getInsightIcon(insight.type)}</Text>
+                    <Text style={styles.insightTitle}>{insight.title}</Text>
+                  </View>
+                  <Text style={styles.insightMessage}>{insight.message}</Text>
+                  {insight.impact && (
+                    <Text style={styles.insightImpact}>{insight.impact}</Text>
+                  )}
+                  {insight.action && (
+                    <Text style={styles.insightAction}>→ {insight.action}</Text>
+                  )}
+                </View>
+              ))}
+            </>
+          )}
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>
-            ${stats.totalIncomeThisMonth.toLocaleString(undefined, {
-              maximumFractionDigits: 0,
-            })}
-          </Text>
-          <Text style={styles.statLabel}>Income</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statValue, styles.expenseValue]}>
-            ${stats.totalExpensesThisMonth.toLocaleString(undefined, {
-              maximumFractionDigits: 0,
-            })}
-          </Text>
-          <Text style={styles.statLabel}>Expenses</Text>
-        </View>
-      </View>
+      )}
 
       {/* Quick Actions */}
       <View style={styles.section}>
@@ -230,6 +405,7 @@ export default function DashboardScreen() {
         {recentTrips.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No completed trips yet</Text>
+            <Text style={styles.emptySubtext}>Start tracking to see your profit per mile</Text>
           </View>
         ) : (
           recentTrips.map((trip) => (
@@ -263,6 +439,7 @@ export default function DashboardScreen() {
         {recentTransactions.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No transactions yet</Text>
+            <Text style={styles.emptySubtext}>Scan a receipt to start tracking expenses</Text>
           </View>
         ) : (
           recentTransactions.map((txn) => (
@@ -298,7 +475,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: COLORS.background,
   },
   content: {
     padding: 16,
@@ -311,20 +488,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   greeting: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
+    color: COLORS.text,
   },
   companyName: {
     fontSize: 14,
-    color: '#888',
+    color: COLORS.textSecondary,
     marginTop: 4,
   },
   signOutButton: {
     padding: 8,
   },
   signOutText: {
-    color: '#888',
+    color: COLORS.textSecondary,
     fontSize: 14,
   },
   statusBar: {
@@ -339,17 +516,117 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   online: {
-    backgroundColor: '#22c55e',
+    backgroundColor: COLORS.profit,
   },
   offline: {
-    backgroundColor: '#ef4444',
+    backgroundColor: COLORS.loss,
   },
   statusText: {
-    color: '#888',
+    color: COLORS.textSecondary,
     fontSize: 12,
   },
+
+  // PROFIT-FIRST HERO CARD
+  profitCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.surfaceLight,
+  },
+  profitCardTitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  profitHero: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  profitAmount: {
+    fontSize: 48,
+    fontWeight: 'bold',
+  },
+  profitLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    letterSpacing: 2,
+    marginTop: 4,
+  },
+  profitMetricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surfaceLight,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.surfaceLight,
+  },
+  profitMetric: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  profitMetricValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  profitMetricLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  profitMetricDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  revenueExpenseRow: {
+    flexDirection: 'row',
+    marginTop: 16,
+    gap: 12,
+  },
+  revenueBox: {
+    flex: 1,
+    backgroundColor: 'rgba(46, 204, 113, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  revenueLabel: {
+    fontSize: 12,
+    color: COLORS.profit,
+  },
+  revenueValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.profit,
+    marginTop: 4,
+  },
+  expenseBox: {
+    flex: 1,
+    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  expenseLabel: {
+    fontSize: 12,
+    color: COLORS.loss,
+  },
+  expenseValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.loss,
+    marginTop: 4,
+  },
+
+  // Active Trip Banner
   activeTripBanner: {
-    backgroundColor: '#4f46e5',
+    backgroundColor: COLORS.primary,
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
@@ -360,14 +637,14 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#22c55e',
+    backgroundColor: COLORS.profit,
     marginRight: 12,
   },
   activeTripContent: {
     flex: 1,
   },
   activeTripTitle: {
-    color: '#fff',
+    color: COLORS.text,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -377,34 +654,74 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   activeTripArrow: {
-    color: '#fff',
+    color: COLORS.text,
     fontSize: 18,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#2d2d44',
+
+  // AI Insights
+  loadingContainer: {
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
-    padding: 16,
+    padding: 24,
     alignItems: 'center',
   },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+  loadingText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    marginTop: 8,
   },
-  expenseValue: {
-    color: '#ef4444',
+  narrativeCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.secondary,
   },
-  statLabel: {
-    fontSize: 11,
-    color: '#888',
+  narrativeText: {
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  insightCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    borderLeftWidth: 4,
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  insightIcon: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  insightTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  insightMessage: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+  },
+  insightImpact: {
+    fontSize: 13,
+    color: COLORS.accent,
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  insightAction: {
+    fontSize: 13,
+    color: COLORS.secondary,
     marginTop: 4,
   },
+
+  // Sections
   section: {
     marginBottom: 24,
   },
@@ -417,11 +734,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#fff',
+    color: COLORS.text,
     marginBottom: 12,
   },
   seeAllText: {
-    color: '#4f46e5',
+    color: COLORS.secondary,
     fontSize: 14,
   },
   quickActions: {
@@ -430,22 +747,24 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    backgroundColor: '#2d2d44',
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.surfaceLight,
   },
   actionIcon: {
     fontSize: 28,
     marginBottom: 8,
   },
   actionText: {
-    color: '#fff',
+    color: COLORS.text,
     fontSize: 12,
     textAlign: 'center',
   },
   listItem: {
-    backgroundColor: '#2d2d44',
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
@@ -456,17 +775,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listItemTitle: {
-    color: '#fff',
+    color: COLORS.text,
     fontSize: 16,
     fontWeight: '500',
   },
   listItemSubtitle: {
-    color: '#888',
+    color: COLORS.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
   listItemArrow: {
-    color: '#888',
+    color: COLORS.textSecondary,
     fontSize: 16,
   },
   listItemAmount: {
@@ -474,19 +793,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   income: {
-    color: '#22c55e',
+    color: COLORS.profit,
   },
   expense: {
-    color: '#ef4444',
+    color: COLORS.loss,
   },
   emptyState: {
-    backgroundColor: '#2d2d44',
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
   },
   emptyText: {
-    color: '#888',
+    color: COLORS.textSecondary,
     fontSize: 14,
+  },
+  emptySubtext: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 4,
+    opacity: 0.7,
   },
 });
