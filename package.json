@@ -9,6 +9,8 @@
     "web": "expo start --web",
     "lint": "eslint . --ext .ts,.tsx --ignore-pattern node_modules --ignore-pattern .expo",
     "test": "jest --passWithNoTests",
+    "test:security": "jest __tests__/security --passWithNoTests",
+    "test:e2e": "jest __tests__/e2e --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

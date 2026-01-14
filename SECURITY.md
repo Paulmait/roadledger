@@ -1,4 +1,10 @@
-# Security Policy
+# RoadLedger Security Policy
+
+**Version:** 2.0
+**Last Updated:** 2026-01-14
+**Classification:** Internal
+
+---
 
 ## Reporting a Vulnerability
 
@@ -174,6 +180,54 @@ CODECOV_TOKEN=...  # Optional
 3. **Eradication**: Deploy fix via EAS Update
 4. **Recovery**: Verify fix, restore services
 5. **Lessons Learned**: Document and improve
+
+---
+
+## Threat Model
+
+### Attack Vectors
+
+| Vector | Risk | Mitigation |
+|--------|------|------------|
+| **IDOR (Insecure Direct Object Reference)** | HIGH | RLS policies enforce user_id = auth.uid() on all operations |
+| **Privilege Escalation** | HIGH | Service role key server-only; client uses anon key |
+| **Storage Path Traversal** | MEDIUM | Signed URLs validate user folder prefix |
+| **Prompt Injection** | MEDIUM | Text sanitization before AI processing |
+| **Rate Abuse / DDoS** | MEDIUM | Per-user rate limits with circuit breaker |
+| **Transaction Replay** | LOW | Unique constraint on document_id + type |
+| **Session Hijacking** | LOW | expo-secure-store with auto-refresh tokens |
+
+### AI/OCR Specific Threats
+
+| Threat | Mitigation |
+|--------|------------|
+| Prompt injection via receipt text | Sanitize control chars, filter "system:" patterns |
+| Cost explosion via large files | 10MB file limit, 120KB text limit |
+| Data exfiltration via AI | Schema-only extraction, no user secrets in prompts |
+
+### Protected Assets
+
+1. **User Documents**: Private storage, RLS-protected metadata
+2. **Financial Data**: Transactions encrypted at rest, RLS isolated
+3. **Location Data**: Trip points RLS-protected via trip ownership
+4. **Auth Tokens**: Encrypted in device secure storage
+
+---
+
+## Security Testing
+
+Run security tests:
+```bash
+npm run test:security
+```
+
+Test categories:
+- RLS (Row Level Security) - Cross-user access prevention
+- Input Validation - Injection protection
+- Idempotency - Duplicate prevention
+- AI Injection - Prompt injection protection
+
+See `SECURITY_TEST_PLAN.md` for detailed test documentation.
 
 ---
 
