@@ -215,6 +215,51 @@ npx expo export --platform android # Android export
 git add -A && git commit -m "message" && git push origin main
 ```
 
+## Market-Leading Features (Differentiators)
+
+### 1. Load Profitability Calculator
+**The #1 feature competitors lack.** Know if a load is worth it BEFORE you accept.
+- Location: `app/(tabs)/calculator.tsx`
+- Service: `src/services/load/loadCalculator.ts`
+- Calculates ALL costs (fuel, maintenance, insurance, truck payment)
+- Compares to industry benchmarks by trailer type
+- Clear verdict: EXCELLENT / GOOD / MARGINAL / BAD / LOSS
+
+### 2. Fuel Optimizer
+Real-time fuel price optimization by state.
+- Service: `src/services/fuel/fuelOptimizer.ts`
+- Tax-aware pricing (knows state diesel taxes)
+- Recommendations: FILL NOW / WAIT / FILL PARTIAL
+- Shows potential savings by waiting for cheaper state
+
+### 3. Broker/Shipper Ratings
+Community-driven payment reliability ratings.
+- Tables: `brokers`, `broker_ratings`
+- Payment speed (1-5 stars)
+- Communication rating
+- Load accuracy (was it as described?)
+- "Would work again" percentage
+- Average days to pay
+
+### 4. Detention Time Tracking
+Bill for wait time at shippers/receivers.
+- Table: `detention_events`
+- Tracks arrival, loading start, departure times
+- Calculates billable minutes (after 2-hour free time)
+- Photo evidence support
+
+### 5. Push Notifications
+- IFTA quarterly deadline reminders (7 days before)
+- Trip end reminders (don't lose your data)
+- Daily profit summaries
+- Payment alerts
+
+### 6. Saved Lanes
+Track frequently run routes with profitability stats.
+- Table: `saved_lanes`
+- Average rate, best rate, avg profit per lane
+- Preferred brokers per lane
+
 ## Remaining Tasks for Launch (Jan 16, 2026)
 
 ### High Priority
@@ -225,13 +270,13 @@ git add -A && git commit -m "message" && git push origin main
 
 ### Medium Priority
 - [ ] Create admin screens (users.tsx, analytics.tsx, support.tsx)
-- [ ] Add push notifications for trip reminders
 - [ ] Implement bank sync integration
+- [ ] Voice input for hands-free data entry
 
 ### Nice to Have
-- [ ] Dark/light theme toggle
-- [ ] Widget for quick trip start
+- [ ] iOS widgets for quick trip start
 - [ ] Apple Watch companion app
+- [ ] Dark/light theme toggle
 
 ## Testing Checklist
 
