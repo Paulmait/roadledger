@@ -10,6 +10,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   const icons: Record<string, string> = {
     home: '🏠',
     trip: '🚛',
+    calculator: '🧮',
     documents: '📄',
     transactions: '💰',
     exports: '📊',
@@ -93,6 +94,14 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="calculator"
+        options={{
+          title: 'Calculator',
+          headerShown: false,
+          tabBarIcon: ({ focused }) => <TabIcon name="calculator" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="documents"
         options={{
           title: 'Documents',
@@ -114,6 +123,21 @@ export default function TabsLayout() {
           title: 'Exports',
           headerShown: false,
           tabBarIcon: ({ focused }) => <TabIcon name="exports" focused={focused} />,
+        }}
+      />
+      {/* Hidden screens - accessible via navigation but not in tab bar */}
+      <Tabs.Screen
+        name="subscription"
+        options={{
+          href: null, // Hide from tab bar
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          href: null, // Hide from tab bar
+          headerShown: false,
         }}
       />
     </Tabs>
