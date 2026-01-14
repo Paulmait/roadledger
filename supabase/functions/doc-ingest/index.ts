@@ -1,17 +1,27 @@
-// Supabase Edge Function: doc-ingest
-// Processes uploaded documents using OpenAI GPT-4 Vision for data extraction
+// Supabase Edge Function: doc-ingest (Production Hardened)
+// Processes uploaded documents using AI extraction with fallback support
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import {
+  isValidUuid,
+  validateDocumentId,
+  isAllowedMimeType,
+  safeErrorResponse,
+  sanitizeForLog,
+  validateAmount,
+  validateDateString,
+  truncateExtractionJson,
+  ALLOWED_DOCUMENT_TYPES,
+  MAX_FILE_SIZE_BYTES,
+} from '../_shared/validation.ts';
+import { extractWithFallback, AIExtractionResult } from '../_shared/ai-provider.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-
-interface RequestBody {
-  documentId: string;
-}
 
 const RECEIPT_EXTRACTION_PROMPT = `You are analyzing a receipt image. Extract the following information in JSON format:
 
@@ -56,58 +66,110 @@ const SETTLEMENT_EXTRACTION_PROMPT = `You are analyzing a trucking settlement st
 Only return valid JSON. If you can't extract a field, use null or empty array.`;
 
 serve(async (req) => {
+  const requestId = crypto.randomUUID();
+  const startTime = Date.now();
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // Only allow POST
+  if (req.method !== 'POST') {
+    return safeErrorResponse('Method not allowed', 405, corsHeaders);
+  }
+
   try {
     // Get authorization header
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return safeErrorResponse('Missing or invalid authorization', 401, corsHeaders);
     }
 
-    // Create Supabase client with service role for full access
+    // Create Supabase clients
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const openaiKey = Deno.env.get('OPENAI_API_KEY');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    if (!openaiKey) {
-      return new Response(
-        JSON.stringify({ error: 'OpenAI API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Client for auth verification (uses user's token)
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
 
+    // Service client for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse request body
-    const body: RequestBody = await req.json();
-
-    if (!body.documentId) {
-      return new Response(
-        JSON.stringify({ error: 'Missing documentId' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Verify user authentication
+    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+    if (authError || !user) {
+      return safeErrorResponse('Unauthorized', 401, corsHeaders, authError);
     }
 
-    // Get document from database
+    console.log(`[${requestId}] User ${user.id} invoking doc-ingest`);
+
+    // Check rate limit
+    const { data: rateLimitOk } = await supabase.rpc('check_function_rate_limit', {
+      p_user_id: user.id,
+      p_function_name: 'doc-ingest',
+      p_max_per_minute: 5,
+      p_max_per_hour: 50,
+    });
+
+    if (rateLimitOk === false) {
+      console.warn(`[${requestId}] Rate limit exceeded for user ${user.id}`);
+      return safeErrorResponse('Rate limit exceeded. Please try again later.', 429, corsHeaders);
+    }
+
+    // Parse and validate request body
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return safeErrorResponse('Invalid JSON body', 400, corsHeaders);
+    }
+
+    const validation = validateDocumentId(body);
+    if (!validation.valid) {
+      return safeErrorResponse(validation.error, 400, corsHeaders);
+    }
+
+    const { documentId } = validation;
+
+    // Get document from database with ownership check
     const { data: document, error: docError } = await supabase
       .from('documents')
       .select('*')
-      .eq('id', body.documentId)
+      .eq('id', documentId)
+      .eq('user_id', user.id) // CRITICAL: Ownership verification
       .single();
 
     if (docError || !document) {
+      console.warn(`[${requestId}] Document not found or not owned: ${documentId}`);
+      return safeErrorResponse('Document not found', 404, corsHeaders);
+    }
+
+    // Check if already processed (idempotency)
+    if (document.parsed_status === 'parsed') {
+      console.log(`[${requestId}] Document already processed: ${documentId}`);
       return new Response(
-        JSON.stringify({ error: 'Document not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          success: true,
+          parsed_status: 'parsed',
+          extracted: document.extraction_json,
+          cached: true,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Update processing status
+    await supabase
+      .from('documents')
+      .update({
+        processing_started_at: new Date().toISOString(),
+        processing_attempts: (document.processing_attempts || 0) + 1,
+      })
+      .eq('id', documentId);
 
     // Download file from storage
     const bucket = document.type === 'settlement' ? 'settlements' : 'receipts';
@@ -116,16 +178,26 @@ serve(async (req) => {
       .download(document.storage_path);
 
     if (downloadError || !fileData) {
-      console.error('Download error:', downloadError);
-      await updateDocumentStatus(supabase, body.documentId, 'failed', 'Failed to download file');
-      return new Response(
-        JSON.stringify({ error: 'Failed to download file' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.error(`[${requestId}] Download error:`, sanitizeForLog(downloadError?.message || 'Unknown'));
+      await updateDocumentStatus(supabase, documentId, 'failed', 'Failed to download file');
+      return safeErrorResponse('Failed to download file', 500, corsHeaders);
+    }
+
+    // Validate file size
+    const arrayBuffer = await fileData.arrayBuffer();
+    if (arrayBuffer.byteLength > MAX_FILE_SIZE_BYTES) {
+      await updateDocumentStatus(supabase, documentId, 'failed', 'File too large');
+      return safeErrorResponse('File too large (max 10MB)', 400, corsHeaders);
+    }
+
+    // Validate MIME type
+    const contentType = fileData.type || 'image/jpeg';
+    if (!isAllowedMimeType(contentType, ALLOWED_DOCUMENT_TYPES)) {
+      await updateDocumentStatus(supabase, documentId, 'failed', 'Unsupported file type');
+      return safeErrorResponse('Unsupported file type', 400, corsHeaders);
     }
 
     // Convert to base64
-    const arrayBuffer = await fileData.arrayBuffer();
     const base64 = btoa(
       new Uint8Array(arrayBuffer).reduce(
         (data, byte) => data + String.fromCharCode(byte),
@@ -133,121 +205,84 @@ serve(async (req) => {
       )
     );
 
-    // Determine content type
-    const contentType = fileData.type || 'image/jpeg';
-
     // Select prompt based on document type
     const prompt =
       document.type === 'settlement'
         ? SETTLEMENT_EXTRACTION_PROMPT
         : RECEIPT_EXTRACTION_PROMPT;
 
-    // Call OpenAI GPT-4 Vision
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:${contentType};base64,${base64}`,
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 1000,
-        response_format: { type: 'json_object' },
-      }),
-    });
+    // Call AI with fallback support
+    const aiResult = await extractWithFallback(prompt, base64, contentType);
 
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error('OpenAI error:', errorText);
-      await updateDocumentStatus(supabase, body.documentId, 'failed', 'AI extraction failed');
-      return new Response(
-        JSON.stringify({ error: 'AI extraction failed' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!aiResult.success || !aiResult.data) {
+      console.error(`[${requestId}] AI extraction failed:`, aiResult.error);
+      await updateDocumentStatus(supabase, documentId, 'failed', aiResult.error || 'AI extraction failed');
+      return safeErrorResponse('AI extraction failed', 500, corsHeaders);
     }
 
-    const openaiData = await openaiResponse.json();
-    const extractedText = openaiData.choices[0]?.message?.content;
+    const extracted = aiResult.data;
+    console.log(`[${requestId}] Extraction successful via ${aiResult.provider} in ${aiResult.elapsed_ms}ms`);
 
-    if (!extractedText) {
-      await updateDocumentStatus(supabase, body.documentId, 'failed', 'No extraction result');
-      return new Response(
-        JSON.stringify({ error: 'No extraction result' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Validate and sanitize extracted amounts
+    const totalAmount = validateAmount(extracted.total || extracted.net_pay);
+    const extractedDate = validateDateString(extracted.date || extracted.period_end);
 
-    // Parse extracted JSON
-    let extracted;
-    try {
-      extracted = JSON.parse(extractedText);
-    } catch {
-      await updateDocumentStatus(supabase, body.documentId, 'failed', 'Invalid extraction JSON');
-      return new Response(
-        JSON.stringify({ error: 'Invalid extraction JSON' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Truncate extraction JSON if too large
+    const safeExtractionJson = truncateExtractionJson(extracted);
 
     // Update document with extracted data
     const { error: updateError } = await supabase
       .from('documents')
       .update({
         parsed_status: 'parsed',
-        vendor: extracted.vendor || extracted.carrier,
-        document_date: extracted.date || extracted.period_end,
-        total_amount: extracted.total || extracted.net_pay,
-        extraction_json: extracted,
+        vendor: String(extracted.vendor || extracted.carrier || '').substring(0, 255),
+        document_date: extractedDate,
+        total_amount: totalAmount,
+        extraction_json: safeExtractionJson,
+        processing_completed_at: new Date().toISOString(),
+        ai_provider: aiResult.provider,
+        last_error: null,
       })
-      .eq('id', body.documentId);
+      .eq('id', documentId);
 
     if (updateError) {
-      console.error('Update error:', updateError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to update document' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.error(`[${requestId}] Update error:`, sanitizeForLog(updateError.message));
+      return safeErrorResponse('Failed to update document', 500, corsHeaders);
     }
 
-    // If high confidence, auto-create transaction
-    const confidence = extracted.confidence?.total || extracted.confidence?.net_pay || 0;
-    if (confidence >= 0.8 && (extracted.total || extracted.net_pay)) {
-      await createTransactionFromExtraction(supabase, document, extracted);
+    // If high confidence, auto-create transaction (with idempotency)
+    const confidence = (extracted.confidence?.total || extracted.confidence?.net_pay || 0) as number;
+    if (confidence >= 0.8 && totalAmount !== null) {
+      await createTransactionFromExtraction(supabase, document, extracted, extractedDate, totalAmount, requestId);
     }
+
+    // Log successful invocation
+    await supabase.from('function_invocations').insert({
+      user_id: user.id,
+      function_name: 'doc-ingest',
+      request_id: requestId,
+      success: true,
+      elapsed_ms: Date.now() - startTime,
+    });
 
     return new Response(
       JSON.stringify({
         success: true,
         parsed_status: 'parsed',
-        extracted,
+        extracted: safeExtractionJson,
+        provider: aiResult.provider,
+        elapsed_ms: aiResult.elapsed_ms,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error:', error);
-    return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.error(`[${requestId}] Unexpected error:`, sanitizeForLog(error instanceof Error ? error.message : 'Unknown'));
+    return safeErrorResponse('Internal server error', 500, corsHeaders, error);
   }
 });
 
 async function updateDocumentStatus(
-  supabase: any,
+  supabase: SupabaseClient,
   documentId: string,
   status: string,
   error?: string
@@ -256,29 +291,47 @@ async function updateDocumentStatus(
     .from('documents')
     .update({
       parsed_status: status,
-      extraction_json: error ? { error } : null,
+      last_error: error ? error.substring(0, 500) : null,
+      processing_completed_at: new Date().toISOString(),
     })
     .eq('id', documentId);
 }
 
 async function createTransactionFromExtraction(
-  supabase: any,
-  document: any,
-  extracted: any
+  supabase: SupabaseClient,
+  document: Record<string, unknown>,
+  extracted: Record<string, unknown>,
+  extractedDate: string | null,
+  totalAmount: number,
+  requestId: string
 ) {
   const isSettlement = document.type === 'settlement';
 
-  await supabase.from('transactions').insert({
-    user_id: document.user_id,
-    trip_id: document.trip_id,
-    type: isSettlement ? 'income' : 'expense',
-    category: isSettlement ? 'other' : (extracted.category_guess || 'other'),
-    amount: extracted.total || extracted.net_pay,
-    date: extracted.date || extracted.period_end || new Date().toISOString().split('T')[0],
-    vendor: extracted.vendor || extracted.carrier,
-    source: 'document_ai',
-    document_id: document.id,
-    gallons: extracted.fuel_gallons,
-    jurisdiction: extracted.state_hint,
-  });
+  // Use upsert with unique constraint for idempotency
+  // The unique index on (document_id, type) prevents duplicates
+  const { error } = await supabase.from('transactions').upsert(
+    {
+      user_id: document.user_id,
+      trip_id: document.trip_id,
+      type: isSettlement ? 'income' : 'expense',
+      category: isSettlement ? 'other' : ((extracted.category_guess as string) || 'other'),
+      amount: totalAmount,
+      date: extractedDate || new Date().toISOString().split('T')[0],
+      vendor: String(extracted.vendor || extracted.carrier || '').substring(0, 255),
+      source: 'document_ai',
+      document_id: document.id,
+      gallons: validateAmount(extracted.fuel_gallons),
+      jurisdiction: extracted.state_hint ? String(extracted.state_hint).substring(0, 2).toUpperCase() : null,
+    },
+    {
+      onConflict: 'document_id,type',
+      ignoreDuplicates: false, // Update existing if found
+    }
+  );
+
+  if (error) {
+    console.warn(`[${requestId}] Transaction upsert warning:`, sanitizeForLog(error.message));
+  } else {
+    console.log(`[${requestId}] Transaction created/updated for document ${document.id}`);
+  }
 }
