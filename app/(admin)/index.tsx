@@ -341,28 +341,28 @@ export default function AdminDashboardScreen() {
         <View style={styles.actionsGrid}>
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => router.push('/(admin)/users')}
+            onPress={() => router.push('/(admin)/users' as any)}
           >
             <Text style={styles.actionIcon}>👥</Text>
             <Text style={styles.actionLabel}>Users</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => router.push('/(admin)/analytics')}
+            onPress={() => router.push('/(admin)/analytics' as any)}
           >
             <Text style={styles.actionIcon}>📊</Text>
             <Text style={styles.actionLabel}>Analytics</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => router.push('/(admin)/subscriptions')}
+            onPress={() => router.push('/(admin)/subscriptions' as any)}
           >
             <Text style={styles.actionIcon}>💳</Text>
             <Text style={styles.actionLabel}>Billing</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => router.push('/(admin)/support')}
+            onPress={() => router.push('/(admin)/support' as any)}
           >
             <Text style={styles.actionIcon}>🎫</Text>
             <Text style={styles.actionLabel}>Support</Text>
@@ -380,7 +380,7 @@ export default function AdminDashboardScreen() {
           <TouchableOpacity
             key={user.id}
             style={styles.userCard}
-            onPress={() => router.push(`/(admin)/users?id=${user.id}`)}
+            onPress={() => router.push(`/(admin)/users?id=${user.id}` as any)}
           >
             <View style={styles.userInfo}>
               <Text style={styles.userName}>{user.full_name || 'Unnamed User'}</Text>

@@ -73,7 +73,7 @@ CREATE TRIGGER prevent_transactions_user_change
 
 -- Index for document list queries (user + status + date)
 CREATE INDEX IF NOT EXISTS idx_documents_user_status_date
-ON documents(user_id, parsed_status, created_at DESC);
+ON documents(user_id, parsed_status, uploaded_at DESC);
 
 -- Index for transaction list queries (user + date)
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date
@@ -200,7 +200,7 @@ SELECT
   d.processing_attempts,
   d.processing_started_at,
   d.processing_completed_at,
-  d.created_at,
+  d.uploaded_at,
   -- Redact sensitive data
   CASE WHEN d.vendor IS NOT NULL THEN LEFT(d.vendor, 3) || '***' ELSE NULL END as vendor_redacted,
   CASE WHEN d.total_amount IS NOT NULL THEN 'PRESENT' ELSE 'NULL' END as has_amount,

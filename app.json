@@ -22,7 +22,11 @@
         "NSLocationAlwaysUsageDescription": "RoadLedger needs background location access to accurately track your trips even when the app is in the background.",
         "NSCameraUsageDescription": "RoadLedger uses the camera to capture receipts and settlement documents.",
         "NSPhotoLibraryUsageDescription": "RoadLedger needs access to your photo library to upload receipts and documents.",
-        "UIBackgroundModes": ["location", "fetch", "processing"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "processing"
+        ]
       }
     },
     "android": {
@@ -33,14 +37,15 @@
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION",
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -79,6 +84,15 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": "https://roadledger.app"
+      },
+      "eas": {
+        "projectId": "81ab29d1-f666-4ed6-92da-c50612640865"
+      }
+    },
+    "owner": "guampaul"
   }
 }

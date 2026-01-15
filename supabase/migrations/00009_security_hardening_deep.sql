@@ -212,10 +212,12 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- RLS for security_events (admin only)
 ALTER TABLE security_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Only admins can view security events" ON security_events;
 CREATE POLICY "Only admins can view security events"
 ON security_events FOR SELECT
 USING (is_admin());
 
+DROP POLICY IF EXISTS "System can insert security events" ON security_events;
 CREATE POLICY "System can insert security events"
 ON security_events FOR INSERT
 WITH CHECK (true);
@@ -390,6 +392,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- Rate limit config is admin-only
 ALTER TABLE rate_limit_config ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Only admins can manage rate limit config" ON rate_limit_config;
 CREATE POLICY "Only admins can manage rate limit config"
 ON rate_limit_config FOR ALL
 USING (is_admin());

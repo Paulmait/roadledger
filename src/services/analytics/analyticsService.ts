@@ -70,7 +70,7 @@ class AnalyticsService {
   private deviceInfo: DeviceInfo | null = null;
   private userId: string | null = null;
   private eventQueue: AnalyticsEvent[] = [];
-  private flushInterval: NodeJS.Timeout | null = null;
+  private flushInterval: ReturnType<typeof setInterval> | null = null;
   private isInitialized = false;
 
   constructor() {

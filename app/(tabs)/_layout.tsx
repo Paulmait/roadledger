@@ -14,6 +14,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
     documents: '📄',
     transactions: '💰',
     exports: '📊',
+    dev: '🔧',
   };
 
   return (
@@ -138,6 +139,14 @@ export default function TabsLayout() {
         options={{
           href: null, // Hide from tab bar
           headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="dev"
+        options={{
+          title: 'Dev',
+          headerShown: false,
+          tabBarIcon: ({ focused }) => <TabIcon name="dev" focused={focused} />,
         }}
       />
     </Tabs>

@@ -126,10 +126,12 @@ EXECUTE FUNCTION prevent_user_id_change();
 
 ### Deployment
 
-- [ ] Supabase project in production mode
+- [x] Supabase project in production mode
+- [x] Database migrations deployed (00001-00009)
+- [x] Edge Functions deployed (8 functions)
 - [ ] Custom domain configured
 - [ ] SSL/TLS verified
-- [ ] Edge Function secrets set
+- [ ] Edge Function secrets set (OPENAI_API_KEY, ANTHROPIC_API_KEY)
 - [ ] Monitoring/alerting configured
 - [ ] Backup policy established
 
