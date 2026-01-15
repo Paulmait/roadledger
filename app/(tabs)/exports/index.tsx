@@ -6,11 +6,16 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { format, startOfQuarter, endOfQuarter, subQuarters } from 'date-fns';
-import { useUser } from '@/stores/authStore';
+import { router } from 'expo-router';
+import { useUser, useProfile } from '@/stores/authStore';
 import { getTotalMilesByJurisdiction, getUserTransactions } from '@/lib/database';
 import { getJurisdictionName, getCurrentIFTAQuarter } from '@/constants';
+import { canAccessFeature, type SubscriptionTier } from '@/constants/pricing';
+import { supabase } from '@/lib/supabase/client';
 import type { ExportType } from '@/types/database.types';
 
 interface QuarterOption {
@@ -22,12 +27,14 @@ interface QuarterOption {
 
 export default function ExportsScreen() {
   const user = useUser();
+  const profile = useProfile();
   const [selectedQuarter, setSelectedQuarter] = useState<QuarterOption | null>(null);
   const [jurisdictionMiles, setJurisdictionMiles] = useState<
     { jurisdiction: string; total_miles: number }[]
   >([]);
   const [fuelExpenses, setFuelExpenses] = useState(0);
   const [totalMiles, setTotalMiles] = useState(0);
+  const [exporting, setExporting] = useState<ExportType | null>(null);
 
   // Generate quarter options (current + last 3)
   const quarterOptions: QuarterOption[] = [];
@@ -83,8 +90,25 @@ export default function ExportsScreen() {
     }
   };
 
-  const handleExport = (type: ExportType) => {
-    if (!selectedQuarter) return;
+  const handleExport = async (type: ExportType) => {
+    if (!selectedQuarter || !user?.id) return;
+
+    // Check subscription tier for export features
+    const tier = (profile?.subscription_tier || 'free') as SubscriptionTier;
+    if (!canAccessFeature(tier, 'pro')) {
+      Alert.alert(
+        'Pro Feature',
+        'IFTA and Tax reports require a Pro subscription. Upgrade to unlock exports.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Upgrade',
+            onPress: () => router.push('/(tabs)/subscription'),
+          },
+        ]
+      );
+      return;
+    }
 
     Alert.alert(
       `Generate ${type === 'ifta' ? 'IFTA' : 'Tax Pack'} Report`,
@@ -93,12 +117,76 @@ export default function ExportsScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Generate',
-          onPress: () => {
-            // TODO: Call edge function to generate report
-            Alert.alert(
-              'Report Queued',
-              'Your report is being generated. You will be notified when it is ready.'
-            );
+          onPress: async () => {
+            setExporting(type);
+
+            try {
+              // Get auth session
+              const { data: sessionData } = await supabase.auth.getSession();
+              const session = sessionData?.session;
+
+              if (!session?.access_token) {
+                Alert.alert('Error', 'You must be logged in to generate reports.');
+                return;
+              }
+
+              // Determine which edge function to call
+              const functionName = type === 'ifta' ? 'export-ifta' : 'export-tax-pack';
+
+              const response = await fetch(
+                `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/${functionName}`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                  },
+                  body: JSON.stringify({
+                    quarter: selectedQuarter.value,
+                    start_date: selectedQuarter.startDate,
+                    end_date: selectedQuarter.endDate,
+                  }),
+                }
+              );
+
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Export error:', errorData);
+                Alert.alert(
+                  'Export Failed',
+                  errorData.error || 'Failed to generate report. Please try again.'
+                );
+                return;
+              }
+
+              const result = await response.json();
+
+              if (result.download_url) {
+                Alert.alert(
+                  'Report Ready',
+                  `Your ${type === 'ifta' ? 'IFTA' : 'Tax Pack'} report for ${selectedQuarter.label} is ready.`,
+                  [
+                    { text: 'Later', style: 'cancel' },
+                    {
+                      text: 'Download',
+                      onPress: () => {
+                        Linking.openURL(result.download_url);
+                      },
+                    },
+                  ]
+                );
+              } else {
+                Alert.alert(
+                  'Report Generated',
+                  `Your ${type === 'ifta' ? 'IFTA' : 'Tax Pack'} report for ${selectedQuarter.label} has been generated. Check your email or the exports tab for the download link.`
+                );
+              }
+            } catch (error) {
+              console.error('Export error:', error);
+              Alert.alert('Error', 'Failed to generate report. Please try again.');
+            } finally {
+              setExporting(null);
+            }
           },
         },
       ]
@@ -193,11 +281,16 @@ export default function ExportsScreen() {
         <Text style={styles.sectionTitle}>Generate Reports</Text>
 
         <TouchableOpacity
-          style={styles.exportButton}
+          style={[styles.exportButton, exporting === 'ifta' && styles.buttonDisabled]}
           onPress={() => handleExport('ifta')}
+          disabled={exporting !== null}
         >
           <View style={styles.exportIcon}>
-            <Text style={styles.exportIconText}>📊</Text>
+            {exporting === 'ifta' ? (
+              <ActivityIndicator color="#4f46e5" />
+            ) : (
+              <Text style={styles.exportIconText}>📊</Text>
+            )}
           </View>
           <View style={styles.exportInfo}>
             <Text style={styles.exportTitle}>IFTA Quarterly Report</Text>
@@ -208,11 +301,16 @@ export default function ExportsScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.exportButton}
+          style={[styles.exportButton, exporting === 'tax_pack' && styles.buttonDisabled]}
           onPress={() => handleExport('tax_pack')}
+          disabled={exporting !== null}
         >
           <View style={styles.exportIcon}>
-            <Text style={styles.exportIconText}>📁</Text>
+            {exporting === 'tax_pack' ? (
+              <ActivityIndicator color="#4f46e5" />
+            ) : (
+              <Text style={styles.exportIconText}>📁</Text>
+            )}
           </View>
           <View style={styles.exportInfo}>
             <Text style={styles.exportTitle}>Tax Pack</Text>
@@ -380,5 +478,8 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 12,
     lineHeight: 18,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });

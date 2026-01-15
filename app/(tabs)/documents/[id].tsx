@@ -11,7 +11,11 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { format } from 'date-fns';
-import { getDocumentById } from '@/lib/database';
+import * as FileSystem from 'expo-file-system';
+import { getDocumentById, updateDocument, deleteDocument } from '@/lib/database';
+import { supabase } from '@/lib/supabase/client';
+import { useProfile } from '@/stores/authStore';
+import { canAccessFeature, type SubscriptionTier } from '@/constants/pricing';
 import type { Document } from '@/types/database.types';
 
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -24,8 +28,11 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 
 export default function DocumentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const profile = useProfile();
   const [document, setDocument] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     async function loadDocument() {
@@ -44,8 +51,26 @@ export default function DocumentDetailScreen() {
     loadDocument();
   }, [id]);
 
-  const handleUpload = () => {
-    // This would trigger the upload to Supabase and AI extraction
+  const handleUpload = async () => {
+    if (!document || !id) return;
+
+    // Check subscription tier for AI features
+    const tier = (profile?.subscription_tier || 'free') as SubscriptionTier;
+    if (!canAccessFeature(tier, 'pro')) {
+      Alert.alert(
+        'Pro Feature',
+        'AI document extraction requires a Pro subscription. Upgrade to unlock automatic receipt scanning.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Upgrade',
+            onPress: () => router.push('/(tabs)/subscription'),
+          },
+        ]
+      );
+      return;
+    }
+
     Alert.alert(
       'Upload Document',
       'This will upload the document for AI extraction. Continue?',
@@ -53,13 +78,153 @@ export default function DocumentDetailScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Upload',
-          onPress: () => {
-            // TODO: Implement upload logic
-            Alert.alert('Uploaded', 'Document submitted for processing.');
+          onPress: async () => {
+            setUploading(true);
+
+            try {
+              // Get auth session
+              const { data: sessionData } = await supabase.auth.getSession();
+              const session = sessionData?.session;
+
+              if (!session?.access_token) {
+                Alert.alert('Error', 'You must be logged in to upload documents.');
+                return;
+              }
+
+              // Read the file as base64
+              const fileUri = document.storage_path;
+              if (!fileUri) {
+                Alert.alert('Error', 'No image file found for this document.');
+                return;
+              }
+
+              // Get file info
+              const fileInfo = await FileSystem.getInfoAsync(fileUri);
+              if (!fileInfo.exists) {
+                Alert.alert('Error', 'Image file not found.');
+                return;
+              }
+
+              // Read as base64
+              const base64 = await FileSystem.readAsStringAsync(fileUri, {
+                encoding: 'base64',
+              });
+
+              // Upload to Supabase Storage
+              const fileName = `${session.user.id}/${id}.jpg`;
+              const { error: uploadError } = await supabase.storage
+                .from('documents')
+                .upload(fileName, Buffer.from(base64, 'base64'), {
+                  contentType: 'image/jpeg',
+                  upsert: true,
+                });
+
+              if (uploadError) {
+                console.error('Storage upload error:', uploadError);
+                Alert.alert('Error', 'Failed to upload document to storage.');
+                return;
+              }
+
+              // Get public URL
+              const { data: urlData } = supabase.storage
+                .from('documents')
+                .getPublicUrl(fileName);
+
+              // Update local document with storage URL
+              await updateDocument(id, {
+                storage_path: urlData.publicUrl,
+              });
+
+              // Call doc-ingest edge function
+              const response = await fetch(
+                `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/doc-ingest`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                  },
+                  body: JSON.stringify({
+                    document_id: id,
+                    storage_path: urlData.publicUrl,
+                    document_type: document.type,
+                  }),
+                }
+              );
+
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Doc-ingest error:', errorData);
+                Alert.alert(
+                  'Processing Error',
+                  'Document uploaded but AI extraction failed. You can retry later.'
+                );
+                return;
+              }
+
+              const result = await response.json();
+
+              // Update local document with extracted data
+              await updateDocument(id, {
+                parsed_status: 'parsed',
+                vendor: result.vendor,
+                document_date: result.date,
+                total_amount: result.amount,
+                extraction_json: result.extraction,
+              });
+
+              // Reload document
+              const updatedDoc = await getDocumentById(id);
+              setDocument(updatedDoc);
+
+              Alert.alert('Success', 'Document processed successfully!');
+            } catch (error) {
+              console.error('Upload error:', error);
+              Alert.alert('Error', 'Failed to process document. Please try again.');
+            } finally {
+              setUploading(false);
+            }
           },
         },
       ]
     );
+  };
+
+  const handleDelete = async () => {
+    if (!document || !id) return;
+
+    Alert.alert('Delete Document', 'Are you sure you want to delete this document?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setDeleting(true);
+
+          try {
+            // Delete from storage if uploaded
+            if (document.storage_path?.includes('supabase')) {
+              const { data: sessionData } = await supabase.auth.getSession();
+              if (sessionData?.session) {
+                const fileName = `${sessionData.session.user.id}/${id}.jpg`;
+                await supabase.storage.from('documents').remove([fileName]);
+              }
+            }
+
+            // Delete from local database
+            await deleteDocument(id);
+
+            Alert.alert('Deleted', 'Document has been deleted.');
+            router.back();
+          } catch (error) {
+            console.error('Delete error:', error);
+            Alert.alert('Error', 'Failed to delete document.');
+          } finally {
+            setDeleting(false);
+          }
+        },
+      },
+    ]);
   };
 
   if (loading) {
@@ -171,28 +336,29 @@ export default function DocumentDetailScreen() {
       {/* Actions */}
       <View style={styles.actions}>
         {document.parsed_status === 'pending' && (
-          <TouchableOpacity style={styles.uploadButton} onPress={handleUpload}>
-            <Text style={styles.uploadButtonText}>Upload for Extraction</Text>
+          <TouchableOpacity
+            style={[styles.uploadButton, uploading && styles.buttonDisabled]}
+            onPress={handleUpload}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.uploadButtonText}>Upload for Extraction</Text>
+            )}
           </TouchableOpacity>
         )}
 
         <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => {
-            Alert.alert('Delete Document', 'Are you sure?', [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: () => {
-                  // TODO: Implement delete
-                  router.back();
-                },
-              },
-            ]);
-          }}
+          style={[styles.deleteButton, deleting && styles.buttonDisabled]}
+          onPress={handleDelete}
+          disabled={deleting}
         >
-          <Text style={styles.deleteButtonText}>Delete Document</Text>
+          {deleting ? (
+            <ActivityIndicator color="#ef4444" />
+          ) : (
+            <Text style={styles.deleteButtonText}>Delete Document</Text>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -338,5 +504,8 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 16,
     fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,12 @@ import {
   Alert,
   ScrollView,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
-import { useUser } from '@/stores/authStore';
+import * as Location from 'expo-location';
+import { useUser, useProfile } from '@/stores/authStore';
 import {
   useTripStore,
   useActiveTrip,
@@ -19,13 +21,28 @@ import {
   useTrackingMode,
   useCurrentJurisdiction,
 } from '@/stores/tripStore';
-import { getUserTrips } from '@/lib/database';
+import { getUserTrips, getMonthlyTripCount } from '@/lib/database';
 import { TRACKING_MODES, type TrackingMode } from '@/constants';
 import { getJurisdictionName } from '@/constants/jurisdictions';
+import {
+  requestLocationPermissions,
+  startLocationTracking,
+  stopLocationTracking,
+  updateTrackingMode,
+  getDistanceBetweenPoints,
+} from '@/services/location/locationService';
+import {
+  initializeBoundaries,
+  detectJurisdictionWithConfidence,
+  resetJurisdictionCache,
+} from '@/services/location/jurisdictionDetector';
+import { supabase } from '@/lib/supabase/client';
+import { getTierDetails, type SubscriptionTier } from '@/constants/pricing';
 import type { Trip } from '@/types/database.types';
 
 export default function TripScreen() {
   const user = useUser();
+  const profile = useProfile();
   const activeTrip = useActiveTrip();
   const isTracking = useIsTracking();
   const trackingMode = useTrackingMode();
@@ -36,6 +53,9 @@ export default function TripScreen() {
   const pauseTrip = useTripStore((state) => state.pauseTrip);
   const resumeTrip = useTripStore((state) => state.resumeTrip);
   const setTrackingMode = useTripStore((state) => state.setTrackingMode);
+  const addPoint = useTripStore((state) => state.addPoint);
+  const updateJurisdictionMiles = useTripStore((state) => state.updateJurisdictionMiles);
+  const setCurrentJurisdiction = useTripStore((state) => state.setCurrentJurisdiction);
   const activeTripPoints = useTripStore((state) => state.activeTripPoints);
   const activeTripJurisdictionMiles = useTripStore(
     (state) => state.activeTripJurisdictionMiles
@@ -44,6 +64,75 @@ export default function TripScreen() {
   const [loaded, setLoaded] = useState(false);
   const [recentTrips, setRecentTrips] = useState<Trip[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [isEnding, setIsEnding] = useState(false);
+  const [boundariesReady, setBoundariesReady] = useState(false);
+
+  // Ref to track last location for distance calculation
+  const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  // Initialize jurisdiction boundaries on mount
+  useEffect(() => {
+    initializeBoundaries()
+      .then(() => setBoundariesReady(true))
+      .catch((err) => console.error('Failed to initialize boundaries:', err));
+  }, []);
+
+  // Location callback handler
+  const handleLocationUpdate = useCallback(
+    async (location: Location.LocationObject) => {
+      const { latitude, longitude } = location.coords;
+      const timestamp = new Date(location.timestamp).toISOString();
+
+      // Detect jurisdiction
+      const { jurisdiction, confidence } = detectJurisdictionWithConfidence(
+        latitude,
+        longitude
+      );
+
+      // Add point to trip
+      await addPoint({
+        trip_id: '', // Will be set by store
+        lat: latitude,
+        lng: longitude,
+        ts: timestamp,
+        accuracy_m: location.coords.accuracy ?? null,
+        speed: location.coords.speed ?? null,
+        jurisdiction,
+      });
+
+      // Update current jurisdiction in store
+      if (jurisdiction) {
+        setCurrentJurisdiction(jurisdiction);
+
+        // Calculate distance from last point and update jurisdiction miles
+        if (lastLocationRef.current) {
+          const distance = getDistanceBetweenPoints(
+            lastLocationRef.current.lat,
+            lastLocationRef.current.lng,
+            latitude,
+            longitude
+          );
+
+          if (distance > 0.01) {
+            // Only count if moved more than ~50 feet
+            // Get current miles for this jurisdiction
+            const currentMiles =
+              activeTripJurisdictionMiles.find((jm) => jm.jurisdiction === jurisdiction)
+                ?.miles ?? 0;
+            await updateJurisdictionMiles(
+              jurisdiction,
+              currentMiles + distance,
+              confidence
+            );
+          }
+        }
+      }
+
+      lastLocationRef.current = { lat: latitude, lng: longitude };
+    },
+    [addPoint, setCurrentJurisdiction, updateJurisdictionMiles, activeTripJurisdictionMiles]
+  );
 
   const loadRecentTrips = async () => {
     if (!user?.id) return;
@@ -67,12 +156,84 @@ export default function TripScreen() {
       return;
     }
 
+    // Check subscription limits
+    const tier = (profile?.subscription_tier || 'free') as SubscriptionTier;
+    const tierDetails = getTierDetails(tier);
+    const tripLimit = tierDetails.limits.tripsPerMonth;
+
+    if (tripLimit !== -1) {
+      try {
+        const tripCount = await getMonthlyTripCount(user.id);
+        if (tripCount >= tripLimit) {
+          Alert.alert(
+            'Trip Limit Reached',
+            `Your ${tier} plan allows ${tripLimit} trips per month. Upgrade to Pro for unlimited trips.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Upgrade',
+                onPress: () => router.push('/(tabs)/subscription'),
+              },
+            ]
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to check trip count:', error);
+      }
+    }
+
+    setIsStarting(true);
+
     try {
+      // Request location permissions
+      const permissions = await requestLocationPermissions();
+
+      if (!permissions.foreground) {
+        Alert.alert(
+          'Location Permission Required',
+          'RoadLedger needs location access to track your trips and calculate mileage by state. Please enable location access in your device settings.',
+          [{ text: 'OK' }]
+        );
+        setIsStarting(false);
+        return;
+      }
+
+      if (!permissions.background) {
+        Alert.alert(
+          'Background Location Recommended',
+          'For accurate tracking, please enable "Always" location access. Without it, tracking may stop when the app is in the background.',
+          [{ text: 'Continue Anyway' }]
+        );
+      }
+
+      // Reset jurisdiction cache for new trip
+      resetJurisdictionCache();
+      lastLocationRef.current = null;
+
+      // Create trip in database
       await startTrip(user.id, loaded);
-      // Note: Location tracking would be started here via the location service
-      Alert.alert('Trip Started', 'Your trip is now being tracked.');
+
+      // Start location tracking
+      const trackingStarted = await startLocationTracking(
+        trackingMode,
+        handleLocationUpdate
+      );
+
+      if (!trackingStarted) {
+        Alert.alert(
+          'Tracking Issue',
+          'Trip created but GPS tracking could not start. Your mileage may not be recorded.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Trip Started', 'Your trip is now being tracked.');
+      }
     } catch (error) {
+      console.error('Failed to start trip:', error);
       Alert.alert('Error', 'Failed to start trip. Please try again.');
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -86,12 +247,48 @@ export default function TripScreen() {
           text: 'End Trip',
           style: 'destructive',
           onPress: async () => {
+            if (!activeTrip) return;
+            setIsEnding(true);
+
             try {
+              // Stop location tracking
+              await stopLocationTracking();
+
+              // End trip in database
               await endTrip();
-              Alert.alert('Trip Ended', 'Your trip has been saved.');
+
+              // Call trip-finalize edge function to calculate final mileage
+              try {
+                const { data: session } = await supabase.auth.getSession();
+                if (session?.session?.access_token) {
+                  const response = await fetch(
+                    `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/trip-finalize`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${session.session.access_token}`,
+                      },
+                      body: JSON.stringify({ trip_id: activeTrip.id }),
+                    }
+                  );
+
+                  if (!response.ok) {
+                    console.warn('Trip finalization returned non-OK status');
+                  }
+                }
+              } catch (finalizeError) {
+                // Don't block trip ending if finalization fails
+                console.error('Trip finalization error:', finalizeError);
+              }
+
+              Alert.alert('Trip Ended', 'Your trip has been saved and mileage calculated.');
               loadRecentTrips();
             } catch (error) {
+              console.error('Failed to end trip:', error);
               Alert.alert('Error', 'Failed to end trip. Please try again.');
+            } finally {
+              setIsEnding(false);
             }
           },
         },
@@ -101,7 +298,10 @@ export default function TripScreen() {
 
   const handlePauseTrip = async () => {
     try {
+      // Stop location tracking when paused
+      await stopLocationTracking();
       await pauseTrip();
+      Alert.alert('Trip Paused', 'GPS tracking has been paused.');
     } catch (error) {
       Alert.alert('Error', 'Failed to pause trip.');
     }
@@ -110,15 +310,30 @@ export default function TripScreen() {
   const handleResumeTrip = async () => {
     try {
       await resumeTrip();
+      // Resume location tracking
+      const trackingStarted = await startLocationTracking(
+        trackingMode,
+        handleLocationUpdate
+      );
+      if (trackingStarted) {
+        Alert.alert('Trip Resumed', 'GPS tracking has resumed.');
+      } else {
+        Alert.alert('Warning', 'Trip resumed but GPS tracking could not restart.');
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to resume trip.');
     }
   };
 
-  const toggleTrackingMode = () => {
+  const toggleTrackingMode = async () => {
     const newMode: TrackingMode =
       trackingMode === 'precision' ? 'battery_saver' : 'precision';
     setTrackingMode(newMode);
+
+    // If actively tracking, update the GPS service with new mode
+    if (isTracking && activeTrip) {
+      await updateTrackingMode(newMode, handleLocationUpdate);
+    }
   };
 
   const totalMiles = activeTripJurisdictionMiles.reduce(
@@ -258,10 +473,15 @@ export default function TripScreen() {
           </View>
 
           <TouchableOpacity
-            style={styles.startButton}
+            style={[styles.startButton, isStarting && styles.buttonDisabled]}
             onPress={handleStartTrip}
+            disabled={isStarting}
           >
-            <Text style={styles.startButtonText}>Start Trip</Text>
+            {isStarting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.startButtonText}>Start Trip</Text>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -483,6 +703,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   recentSection: {
     marginTop: 8,

@@ -12,8 +12,9 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
-import { useUser } from '@/stores/authStore';
-import { getUserDocuments, createDocument } from '@/lib/database';
+import { useUser, useProfile } from '@/stores/authStore';
+import { getUserDocuments, createDocument, getMonthlyDocumentCount } from '@/lib/database';
+import { getTierDetails, type SubscriptionTier } from '@/constants/pricing';
 import type { Document, DocType } from '@/types/database.types';
 
 const DOC_TYPE_LABELS: Record<DocType, string> = {
@@ -32,6 +33,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function DocumentsScreen() {
   const user = useUser();
+  const profile = useProfile();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedType, setSelectedType] = useState<DocType | 'all'>('all');
@@ -130,7 +132,36 @@ export default function DocumentsScreen() {
     }
   };
 
-  const showCaptureOptions = () => {
+  const showCaptureOptions = async () => {
+    if (!user?.id) return;
+
+    // Check subscription limits
+    const tier = (profile?.subscription_tier || 'free') as SubscriptionTier;
+    const tierDetails = getTierDetails(tier);
+    const documentLimit = tierDetails.limits.documentsPerMonth;
+
+    if (documentLimit !== -1) {
+      try {
+        const docCount = await getMonthlyDocumentCount(user.id);
+        if (docCount >= documentLimit) {
+          Alert.alert(
+            'Document Limit Reached',
+            `Your ${tier} plan allows ${documentLimit} document uploads per month. Upgrade to Pro for unlimited uploads.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Upgrade',
+                onPress: () => router.push('/(tabs)/subscription'),
+              },
+            ]
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to check document count:', error);
+      }
+    }
+
     Alert.alert('Add Document', 'Choose document type', [
       {
         text: 'Receipt',

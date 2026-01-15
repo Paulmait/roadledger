@@ -20,14 +20,19 @@ export type ExportType = 'ifta' | 'tax_pack';
 export type ExportStatus = 'queued' | 'ready' | 'failed';
 export type JurisdictionMethod = 'gps' | 'manual_adjust' | 'import';
 
+export type SubscriptionTier = 'free' | 'pro' | 'premium';
+
 export interface Profile {
   id: string;
+  email?: string;
   full_name: string | null;
   company_name: string | null;
   home_state: string | null;
   timezone: string | null;
   mc_number: string | null;
   dot_number: string | null;
+  subscription_tier: SubscriptionTier;
+  last_login: string | null;
   created_at: string;
   updated_at: string;
 }

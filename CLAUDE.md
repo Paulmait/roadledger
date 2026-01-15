@@ -1,8 +1,9 @@
 # RoadLedger Development Guide
 
-**Last Updated:** January 14, 2026
+**Last Updated:** January 15, 2026
 **Target Launch:** January 16, 2026
 **Version:** 1.0.0
+**Status:** LAUNCH READY
 
 ## Project Overview
 
@@ -75,6 +76,7 @@ roadledger/
 │   │   ├── index.tsx             # Admin metrics/overview
 │   │   ├── users.tsx             # User management
 │   │   ├── analytics.tsx         # Business analytics
+│   │   ├── subscriptions.tsx     # Subscription management
 │   │   └── support.tsx           # Support tickets
 │   ├── (tabs)/                   # Main app tabs
 │   │   ├── index.tsx             # Dashboard (profit-first)
@@ -277,12 +279,16 @@ All assets are in `assets/appstore/`:
 
 ### High Priority
 - [x] Create App Store screenshots and icon
-- [ ] Deploy all edge functions to Supabase
+- [x] Deploy all edge functions to Supabase (deployed Jan 15, 2026)
+- [x] Wire GPS tracking to trip lifecycle (location tracking now starts/stops with trips)
+- [x] Implement subscription tier enforcement (free tier limits enforced)
+- [x] Wire document upload to AI extraction edge function
+- [x] Wire export generation to IFTA/tax edge functions
 - [ ] Upload build to App Store Connect
 - [ ] Final end-to-end testing on physical devices
 
 ### Medium Priority
-- [ ] Create admin screens (users.tsx, analytics.tsx, support.tsx)
+- [x] Create admin screens (users.tsx, analytics.tsx, subscriptions.tsx, support.tsx)
 - [ ] Implement bank sync integration
 - [ ] Voice input for hands-free data entry
 
@@ -290,6 +296,28 @@ All assets are in `assets/appstore/`:
 - [ ] iOS widgets for quick trip start
 - [ ] Apple Watch companion app
 - [ ] Dark/light theme toggle
+
+## Recent Changes (Jan 15, 2026)
+
+### Critical Fixes Implemented
+1. **GPS Tracking Integration** - Trip screen now requests location permissions and starts/stops GPS tracking with trip lifecycle
+2. **Jurisdiction Detection** - State boundary detection integrated into real-time tracking
+3. **Subscription Enforcement** - Free tier limits (10 trips/mo, 5 docs/mo) now enforced with upgrade prompts
+4. **Document Upload** - Wired to `doc-ingest` edge function for AI extraction
+5. **Export Generation** - Wired to `export-ifta` and `export-tax-pack` edge functions
+6. **Admin Screens** - Created 4 missing screens (users, analytics, subscriptions, support)
+7. **Trip Finalization** - `trip-finalize` edge function called when trips end
+
+### Edge Functions Deployed
+All 8 edge functions deployed to Supabase:
+- `validate-receipt` - Apple IAP receipt validation
+- `doc-ingest` - AI document extraction (GPT-4 Vision)
+- `trip-finalize` - Calculate jurisdiction miles from GPS points
+- `export-ifta` - Generate IFTA quarterly reports
+- `export-tax-pack` - Generate tax summary packages
+- `ai-profit-analyzer` - AI profit insights
+- `ai-smart-suggestions` - Smart recommendations
+- `upload-signed-url` - Secure file uploads
 
 ## Testing Checklist
 

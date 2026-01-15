@@ -139,6 +139,39 @@ export async function deleteTrip(id: string): Promise<void> {
   await db.runAsync('DELETE FROM trips WHERE id = ?', [id]);
 }
 
+export async function getMonthlyTripCount(userId: string): Promise<number> {
+  const db = await getDatabase();
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+
+  const result = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM trips
+     WHERE user_id = ?
+     AND started_at >= ?
+     AND started_at <= ?
+     AND status != 'draft'`,
+    [userId, startOfMonth, endOfMonth]
+  );
+  return result?.count ?? 0;
+}
+
+export async function getMonthlyDocumentCount(userId: string): Promise<number> {
+  const db = await getDatabase();
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+
+  const result = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM documents
+     WHERE user_id = ?
+     AND uploaded_at >= ?
+     AND uploaded_at <= ?`,
+    [userId, startOfMonth, endOfMonth]
+  );
+  return result?.count ?? 0;
+}
+
 // ============================================
 // TRIP POINTS OPERATIONS
 // ============================================
@@ -503,6 +536,54 @@ export async function getUserDocuments(
       ? JSON.parse(doc.extraction_json)
       : null,
   })) as Document[];
+}
+
+export async function updateDocument(
+  id: string,
+  updates: Partial<Document>
+): Promise<void> {
+  const db = await getDatabase();
+  const fields: string[] = [];
+  const values: (string | number | null)[] = [];
+
+  if (updates.storage_path !== undefined) {
+    fields.push('storage_path = ?');
+    values.push(updates.storage_path);
+  }
+  if (updates.parsed_status !== undefined) {
+    fields.push('parsed_status = ?');
+    values.push(updates.parsed_status);
+  }
+  if (updates.vendor !== undefined) {
+    fields.push('vendor = ?');
+    values.push(updates.vendor);
+  }
+  if (updates.document_date !== undefined) {
+    fields.push('document_date = ?');
+    values.push(updates.document_date);
+  }
+  if (updates.total_amount !== undefined) {
+    fields.push('total_amount = ?');
+    values.push(updates.total_amount);
+  }
+  if (updates.extraction_json !== undefined) {
+    fields.push('extraction_json = ?');
+    values.push(updates.extraction_json ? JSON.stringify(updates.extraction_json) : null);
+  }
+
+  if (fields.length === 0) return;
+
+  values.push(id);
+
+  await db.runAsync(
+    `UPDATE documents SET ${fields.join(', ')} WHERE id = ?`,
+    values
+  );
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync('DELETE FROM documents WHERE id = ?', [id]);
 }
 
 // ============================================
