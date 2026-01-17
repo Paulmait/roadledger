@@ -1,9 +1,9 @@
 # RoadLedger Development Guide
 
-**Last Updated:** January 15, 2026
-**Target Launch:** January 16, 2026
+**Last Updated:** January 17, 2026
+**Target Launch:** January 17, 2026
 **Version:** 1.0.0
-**Status:** LAUNCH READY
+**Status:** PRODUCTION READY - Security Hardened
 
 ## Project Overview
 
@@ -48,13 +48,18 @@ EXPO_PUBLIC_SUPABASE_URL=https://kbohuorolouxqgtzmrsa.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJ... # Get from Supabase Dashboard > Settings > API
 ```
 
-## Pricing Tiers
+## Pricing Tiers (Updated Jan 17, 2026)
 
 | Tier | Monthly | Yearly | Key Features |
 |------|---------|--------|--------------|
-| Free | $0 | $0 | 10 trips/mo, basic tracking, 30-day history |
-| Pro | $9.99 | $79.99 | Unlimited trips, AI receipt scanning, IFTA reports |
-| Premium | $19.99 | $149.99 | Everything + AI profit insights, lane analysis, priority support |
+| Free | $0 | $0 | 5 trips/mo, 3 docs/mo, basic tracking |
+| Pro | $14.99 | $119.99 | Unlimited trips, AI receipt scanning, IFTA reports |
+| Premium | $29.99 | $239.99 | Everything + unlimited AI insights, lane analysis, priority support |
+
+**Pricing Strategy:** Premium pricing for AI-powered features that competitors lack.
+- TruckLogics charges $75/mo for basic TMS
+- Motive/KeepTruckin charges $20-35/mo per vehicle
+- Our AI features justify the premium price point
 
 ### Apple Product IDs
 - `com.roadledger.pro.monthly`
@@ -297,27 +302,51 @@ All assets are in `assets/appstore/`:
 - [ ] Apple Watch companion app
 - [ ] Dark/light theme toggle
 
-## Recent Changes (Jan 15, 2026)
+## Recent Changes (Jan 17, 2026)
 
-### Critical Fixes Implemented
-1. **GPS Tracking Integration** - Trip screen now requests location permissions and starts/stops GPS tracking with trip lifecycle
-2. **Jurisdiction Detection** - State boundary detection integrated into real-time tracking
-3. **Subscription Enforcement** - Free tier limits (10 trips/mo, 5 docs/mo) now enforced with upgrade prompts
-4. **Document Upload** - Wired to `doc-ingest` edge function for AI extraction
-5. **Export Generation** - Wired to `export-ifta` and `export-tax-pack` edge functions
-6. **Admin Screens** - Created 4 missing screens (users, analytics, subscriptions, support)
-7. **Trip Finalization** - `trip-finalize` edge function called when trips end
+### Security Hardening (CRITICAL)
+1. **trip-finalize vulnerability fixed** - Added user authentication and ownership verification
+2. **Rate limiting** - Added to trip-finalize edge function
+3. **Input validation** - UUID format validation on all endpoints
+4. **Safe error responses** - Using `safeErrorResponse()` to prevent data leakage
 
-### Edge Functions Deployed
-All 8 edge functions deployed to Supabase:
-- `validate-receipt` - Apple IAP receipt validation
-- `doc-ingest` - AI document extraction (GPT-4 Vision)
-- `trip-finalize` - Calculate jurisdiction miles from GPS points
-- `export-ifta` - Generate IFTA quarterly reports
-- `export-tax-pack` - Generate tax summary packages
-- `ai-profit-analyzer` - AI profit insights
-- `ai-smart-suggestions` - Smart recommendations
-- `upload-signed-url` - Secure file uploads
+### Pricing Updates
+1. **Free tier reduced** - 5 trips/mo (was 10), 3 docs/mo (was 5) to prevent abuse
+2. **Pro tier increased** - $14.99/mo (was $9.99), $119.99/yr (was $79.99)
+3. **Premium tier increased** - $29.99/mo (was $19.99), $239.99/yr (was $149.99)
+4. **Trip limit enforcement** - Monthly trip count tracked and enforced
+
+### Navigation Fixes
+1. **Settings access** - Added ⚙️ gear icon to Dashboard header
+2. **Dev tab hidden** - Removed from production tab bar
+3. **Profile setup** - "Set up your profile" now tappable, links to Settings
+
+### Previous Changes (Jan 15-16, 2026)
+- GPS Tracking Integration - Trip screen requests permissions, starts/stops tracking
+- Jurisdiction Detection - State boundary detection integrated
+- Subscription Enforcement - Free tier limits enforced with upgrade prompts
+- Document Upload - Wired to `doc-ingest` edge function
+- Export Generation - Wired to IFTA/tax edge functions
+- Admin Screens - Created users, analytics, subscriptions, support screens
+- Replaced uuid with expo-crypto - Fixed native module crash
+- Fixed RLS profile update errors
+
+### Edge Functions Deployed (All 8 Active)
+| Function | Status | Security |
+|----------|--------|----------|
+| `validate-receipt` | ✅ Active | Rate limited, auth required |
+| `doc-ingest` | ✅ Active | Rate limited, file validation |
+| `trip-finalize` | ✅ Active | **Fixed** - User ownership verified |
+| `export-ifta` | ✅ Active | Rate limited, auth required |
+| `export-tax-pack` | ✅ Active | Rate limited, auth required |
+| `ai-profit-analyzer` | ✅ Active | Rate limited, auth required |
+| `ai-smart-suggestions` | ✅ Active | Rate limited, auth required |
+| `upload-signed-url` | ✅ Active | Rate limited, file type validation |
+
+### API Keys Configured
+- ✅ OPENAI_API_KEY - Set in Supabase secrets
+- ✅ ANTHROPIC_API_KEY - Set in Supabase secrets
+- ⚠️ APPLE_SHARED_SECRET - Pending (needed for IAP validation)
 
 ## Testing Checklist
 

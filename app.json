@@ -26,7 +26,8 @@
           "location",
           "fetch",
           "processing"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {

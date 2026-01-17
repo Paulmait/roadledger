@@ -1,27 +1,27 @@
 // RoadLedger Pricing Configuration
-// Competitive pricing based on market research:
-// - TruckLogics: $35-40/mo owner-operator
-// - Trucker Path: $99.99/year individual
-// - Motive: $25-50/mo per vehicle
+// Competitive pricing based on market research (Jan 2026):
+// - TruckLogics: $75/mo (PREMIUM only)
+// - Motive/KeepTruckin: $20-35/mo per vehicle
+// - Fleet management: $25-50/mo
 //
-// Our strategy: Undercut competitors with AI-powered features
+// Our strategy: Premium pricing for AI-powered features that competitors don't have
 
 export const PRICING_TIERS = {
   FREE: {
     id: 'free',
     name: 'Free',
-    description: 'Get started with basic tracking',
+    description: 'Try RoadLedger with basic tracking',
     monthlyPrice: 0,
     yearlyPrice: 0,
     features: [
-      'Trip tracking (up to 10 trips/month)',
+      'Trip tracking (up to 5 trips/month)',
       'Manual expense entry',
       'Basic mileage reports',
       'State-by-state breakdown',
     ],
     limits: {
-      tripsPerMonth: 10,
-      documentsPerMonth: 5,
+      tripsPerMonth: 5,  // Reduced from 10 to prevent abuse
+      documentsPerMonth: 3,  // Reduced from 5
       aiInsightsPerMonth: 0,
       exportsPerMonth: 1,
     },
@@ -30,8 +30,8 @@ export const PRICING_TIERS = {
     id: 'pro',
     name: 'Pro',
     description: 'Everything you need to maximize profit',
-    monthlyPrice: 9.99,
-    yearlyPrice: 79.99, // 33% savings
+    monthlyPrice: 14.99,
+    yearlyPrice: 119.99, // 33% savings
     appleProductId: 'com.roadledger.pro.monthly',
     appleProductIdYearly: 'com.roadledger.pro.yearly',
     features: [
@@ -55,8 +55,8 @@ export const PRICING_TIERS = {
     id: 'premium',
     name: 'Premium',
     description: 'AI-powered insights for serious haulers',
-    monthlyPrice: 19.99,
-    yearlyPrice: 149.99, // 37% savings
+    monthlyPrice: 29.99,
+    yearlyPrice: 239.99, // 33% savings
     appleProductId: 'com.roadledger.premium.monthly',
     appleProductIdYearly: 'com.roadledger.premium.yearly',
     features: [

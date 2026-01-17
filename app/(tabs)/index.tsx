@@ -229,12 +229,17 @@ export default function DashboardScreen() {
           <Text style={styles.greeting}>
             {profile?.full_name ? `${profile.full_name.split(' ')[0]}` : 'Dashboard'}
           </Text>
-          <Text style={styles.companyName}>
-            {profile?.company_name || 'Set up your profile'}
-          </Text>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/settings')}>
+            <Text style={styles.companyName}>
+              {profile?.company_name || 'Tap to set up your profile →'}
+            </Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
-          <Text style={styles.signOutText}>Sign Out</Text>
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/settings')}
+          style={styles.settingsButton}
+        >
+          <Text style={styles.settingsIcon}>⚙️</Text>
         </TouchableOpacity>
       </View>
 
@@ -497,12 +502,17 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 4,
   },
-  signOutButton: {
+  settingsButton: {
     padding: 8,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  signOutText: {
-    color: COLORS.textSecondary,
-    fontSize: 14,
+  settingsIcon: {
+    fontSize: 20,
   },
   statusBar: {
     flexDirection: 'row',

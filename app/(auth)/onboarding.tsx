@@ -33,10 +33,12 @@ export default function OnboardingScreen() {
         dot_number: dotNumber.trim() || null,
         home_state: homeState || null,
       });
-      router.replace('/(tabs)');
     } catch (error) {
+      // Profile update failed - this is ok, user can update later in settings
       console.error('Failed to update profile:', error);
     }
+    // Always proceed to main app
+    router.replace('/(tabs)');
   };
 
   const handleSkip = () => {

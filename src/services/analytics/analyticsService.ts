@@ -4,8 +4,11 @@
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import * as Application from 'expo-application';
+import * as Crypto from 'expo-crypto';
 import { supabase } from '@/lib/supabase';
-import { v4 as uuidv4 } from 'uuid';
+
+// Use expo-crypto for UUID generation (works natively on iOS/Android)
+const uuidv4 = () => Crypto.randomUUID();
 
 // Event types for type safety
 export type AnalyticsEventType =
@@ -66,15 +69,27 @@ interface AnalyticsEvent {
 }
 
 class AnalyticsService {
-  private sessionId: string;
+  private _sessionId: string | null = null;
   private deviceInfo: DeviceInfo | null = null;
   private userId: string | null = null;
   private eventQueue: AnalyticsEvent[] = [];
   private flushInterval: ReturnType<typeof setInterval> | null = null;
   private isInitialized = false;
 
+  // Lazy initialization of sessionId to avoid calling expo-crypto at module load time
+  private get sessionId(): string {
+    if (!this._sessionId) {
+      this._sessionId = uuidv4();
+    }
+    return this._sessionId;
+  }
+
+  private set sessionId(value: string) {
+    this._sessionId = value;
+  }
+
   constructor() {
-    this.sessionId = uuidv4();
+    // Don't initialize sessionId here - it will be lazily created when first accessed
   }
 
   /**

@@ -200,7 +200,12 @@ export const useAuthStore = create<AuthState>()(
 
           const profile = await supabaseUpdateProfile(user.id, updates);
 
-          set({ profile, isLoading: false });
+          // Only update state if we got a profile back
+          if (profile) {
+            set({ profile, isLoading: false });
+          } else {
+            set({ isLoading: false });
+          }
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Failed to update profile',

@@ -144,9 +144,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="dev"
         options={{
-          title: 'Dev',
+          href: null, // Hide from tab bar - dev only
           headerShown: false,
-          tabBarIcon: ({ focused }) => <TabIcon name="dev" focused={focused} />,
         }}
       />
     </Tabs>

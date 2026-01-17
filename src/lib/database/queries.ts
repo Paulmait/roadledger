@@ -1,4 +1,5 @@
 import { getDatabase } from './schema';
+import * as Crypto from 'expo-crypto';
 import type {
   Trip,
   TripPoint,
@@ -7,11 +8,29 @@ import type {
   Document,
   TripStatus,
 } from '@/types/database.types';
-import { v4 as uuidv4 } from 'uuid';
+
+// Use expo-crypto for UUID generation (works natively on iOS/Android)
+const uuidv4 = () => Crypto.randomUUID();
 
 // ============================================
 // TRIP OPERATIONS
 // ============================================
+
+/**
+ * Count trips created this month for a user (for free tier limit enforcement)
+ */
+export async function getMonthlyTripCount(userId: string): Promise<number> {
+  const db = await getDatabase();
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  const result = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM trips WHERE user_id = ? AND created_at >= ?`,
+    [userId, startOfMonth]
+  );
+
+  return result?.count || 0;
+}
 
 export async function createTrip(
   userId: string,

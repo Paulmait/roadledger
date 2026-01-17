@@ -81,7 +81,8 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 export async function updateProfile(
   userId: string,
   updates: ProfileUpdate
-): Promise<Profile> {
+): Promise<Profile | null> {
+  // First try to update existing profile
   const { data, error } = await supabase
     .from('profiles')
     .update(updates)
@@ -89,7 +90,14 @@ export async function updateProfile(
     .select()
     .single();
 
-  if (error) throw error;
+  // If no profile exists yet (trigger hasn't run), return null gracefully
+  if (error) {
+    if (error.code === 'PGRST116') {
+      // No rows returned - profile doesn't exist yet, that's ok
+      return null;
+    }
+    throw error;
+  }
   return data;
 }
 
