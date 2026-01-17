@@ -14,6 +14,7 @@ import { Link, router } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { biometricService, type BiometricCapabilities } from '@/services/auth/biometricService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Logo } from '@/components/Logo';
 
 const STORED_EMAIL_KEY = 'last_logged_in_email';
 
@@ -92,7 +93,7 @@ export default function LoginScreen() {
     >
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>RoadLedger</Text>
+          <Logo size="large" showText={true} showTagline={true} />
           <Text style={styles.subtitle}>Track miles. Capture receipts. Stay compliant.</Text>
         </View>
 

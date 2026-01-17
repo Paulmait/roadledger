@@ -6,6 +6,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
 import { useSyncStore } from '@/stores/syncStore';
+import { startSyncEngine } from '@/services/sync';
+import { analytics } from '@/services/analytics/analyticsService';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -33,6 +35,11 @@ export default function RootLayout() {
         await initialize();
         // Check network status
         await checkNetworkStatus();
+        // Start sync engine for offline support
+        await startSyncEngine();
+        // Initialize analytics
+        const user = useAuthStore.getState().user;
+        await analytics.initialize(user?.id);
       } catch (error) {
         console.error('Initialization error:', error);
       } finally {
@@ -42,6 +49,11 @@ export default function RootLayout() {
     }
 
     init();
+
+    // Cleanup on unmount
+    return () => {
+      analytics.shutdown();
+    };
   }, [initialize, checkNetworkStatus]);
 
   // Don't render until initialized

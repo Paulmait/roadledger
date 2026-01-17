@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
+import { Logo } from '@/components/Logo';
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState('');
@@ -62,6 +63,7 @@ export default function RegisterScreen() {
       >
         <View style={styles.content}>
           <View style={styles.header}>
+            <Logo size="medium" showText={true} />
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Start tracking your trucking business</Text>
           </View>

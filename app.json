@@ -16,6 +16,16 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.roadledger.app",
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0D1B2A",
+        "dark": {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0D1B2A"
+        }
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "RoadLedger needs your location to track trip mileage by state for IFTA compliance.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "RoadLedger needs background location access to accurately track your trips even when the app is in the background.",
@@ -34,7 +44,17 @@
       "package": "com.roadledger.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1E3A5F"
+        "backgroundColor": "#0D1B2A"
+      },
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0D1B2A",
+        "dark": {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0D1B2A"
+        }
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
