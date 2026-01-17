@@ -195,14 +195,12 @@ export default function SubscriptionScreen() {
           <Text style={styles.planName}>{PRICING_TIERS.PRO.name}</Text>
           <View>
             <Text style={styles.planPrice}>
-              ${billingPeriod === 'yearly'
-                ? (PRICING_TIERS.PRO.yearlyPrice / 12).toFixed(2)
-                : PRICING_TIERS.PRO.monthlyPrice}
+              ${PRICING_TIERS.PRO.monthlyPrice.toFixed(2)}
               <Text style={styles.planPriceUnit}>/mo</Text>
             </Text>
             {billingPeriod === 'yearly' && (
               <Text style={styles.billedText}>
-                Billed ${PRICING_TIERS.PRO.yearlyPrice}/year
+                ${PRICING_TIERS.PRO.yearlyPrice}/yr (Save 33%)
               </Text>
             )}
           </View>
@@ -243,14 +241,12 @@ export default function SubscriptionScreen() {
           <Text style={styles.planName}>{PRICING_TIERS.PREMIUM.name}</Text>
           <View>
             <Text style={styles.planPrice}>
-              ${billingPeriod === 'yearly'
-                ? (PRICING_TIERS.PREMIUM.yearlyPrice / 12).toFixed(2)
-                : PRICING_TIERS.PREMIUM.monthlyPrice}
+              ${PRICING_TIERS.PREMIUM.monthlyPrice.toFixed(2)}
               <Text style={styles.planPriceUnit}>/mo</Text>
             </Text>
             {billingPeriod === 'yearly' && (
               <Text style={styles.billedText}>
-                Billed ${PRICING_TIERS.PREMIUM.yearlyPrice}/year
+                ${PRICING_TIERS.PREMIUM.yearlyPrice}/yr (Save 33%)
               </Text>
             )}
           </View>
