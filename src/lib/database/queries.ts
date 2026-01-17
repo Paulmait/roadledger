@@ -590,6 +590,194 @@ export async function deleteDocument(id: string): Promise<void> {
 }
 
 // ============================================
+// DETENTION EVENTS OPERATIONS
+// ============================================
+
+export interface DetentionEvent {
+  id: string;
+  user_id: string;
+  trip_id: string | null;
+  location_type: 'pickup' | 'delivery';
+  facility_name: string | null;
+  facility_address: string | null;
+  appointment_time: string | null;
+  arrived_at: string;
+  loading_started_at: string | null;
+  departed_at: string | null;
+  free_time_minutes: number;
+  billable_minutes: number | null;
+  hourly_rate: number;
+  total_detention_pay: number | null;
+  photo_evidence_path: string | null;
+  notes: string | null;
+  status: 'active' | 'completed' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+}
+
+export async function createDetentionEvent(
+  userId: string,
+  data: Partial<DetentionEvent>
+): Promise<DetentionEvent> {
+  const db = await getDatabase();
+  const id = data.id || uuidv4();
+  const now = new Date().toISOString();
+
+  await db.runAsync(
+    `INSERT INTO detention_events (id, user_id, trip_id, location_type, facility_name, facility_address, appointment_time, arrived_at, loading_started_at, departed_at, free_time_minutes, billable_minutes, hourly_rate, total_detention_pay, photo_evidence_path, notes, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      userId,
+      data.trip_id || null,
+      data.location_type || 'pickup',
+      data.facility_name || null,
+      data.facility_address || null,
+      data.appointment_time || null,
+      data.arrived_at || now,
+      data.loading_started_at || null,
+      data.departed_at || null,
+      data.free_time_minutes ?? 120,
+      data.billable_minutes ?? null,
+      data.hourly_rate ?? 50.0,
+      data.total_detention_pay ?? null,
+      data.photo_evidence_path || null,
+      data.notes || null,
+      data.status || 'active',
+      now,
+      now,
+    ]
+  );
+
+  return getDetentionEventById(id) as Promise<DetentionEvent>;
+}
+
+export async function getDetentionEventById(id: string): Promise<DetentionEvent | null> {
+  const db = await getDatabase();
+  const result = await db.getFirstAsync<DetentionEvent>(
+    'SELECT * FROM detention_events WHERE id = ?',
+    [id]
+  );
+  return result || null;
+}
+
+export async function getActiveDetentionEvent(userId: string): Promise<DetentionEvent | null> {
+  const db = await getDatabase();
+  const result = await db.getFirstAsync<DetentionEvent>(
+    `SELECT * FROM detention_events WHERE user_id = ? AND status = 'active' ORDER BY arrived_at DESC LIMIT 1`,
+    [userId]
+  );
+  return result || null;
+}
+
+export async function getUserDetentionEvents(
+  userId: string,
+  options?: { limit?: number; offset?: number; status?: string }
+): Promise<DetentionEvent[]> {
+  const db = await getDatabase();
+  let query = 'SELECT * FROM detention_events WHERE user_id = ?';
+  const params: (string | number)[] = [userId];
+
+  if (options?.status) {
+    query += ' AND status = ?';
+    params.push(options.status);
+  }
+
+  query += ' ORDER BY arrived_at DESC';
+
+  if (options?.limit) {
+    query += ' LIMIT ?';
+    params.push(options.limit);
+  }
+
+  if (options?.offset) {
+    query += ' OFFSET ?';
+    params.push(options.offset);
+  }
+
+  return db.getAllAsync<DetentionEvent>(query, params);
+}
+
+export async function updateDetentionEvent(
+  id: string,
+  updates: Partial<DetentionEvent>
+): Promise<void> {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  const fields: string[] = [];
+  const values: (string | number | null)[] = [];
+
+  const updateableFields = [
+    'trip_id',
+    'location_type',
+    'facility_name',
+    'facility_address',
+    'appointment_time',
+    'arrived_at',
+    'loading_started_at',
+    'departed_at',
+    'free_time_minutes',
+    'billable_minutes',
+    'hourly_rate',
+    'total_detention_pay',
+    'photo_evidence_path',
+    'notes',
+    'status',
+  ] as const;
+
+  for (const field of updateableFields) {
+    if (updates[field] !== undefined) {
+      fields.push(`${field} = ?`);
+      values.push(updates[field] as string | number | null);
+    }
+  }
+
+  fields.push('updated_at = ?');
+  values.push(now);
+  fields.push('pending_sync = ?');
+  values.push(1);
+  values.push(id);
+
+  await db.runAsync(
+    `UPDATE detention_events SET ${fields.join(', ')} WHERE id = ?`,
+    values
+  );
+}
+
+export async function completeDetentionEvent(id: string): Promise<DetentionEvent | null> {
+  const db = await getDatabase();
+  const event = await getDetentionEventById(id);
+
+  if (!event || !event.arrived_at) return null;
+
+  const now = new Date().toISOString();
+  const departedAt = now;
+
+  // Calculate billable minutes
+  const arrivedTime = new Date(event.arrived_at).getTime();
+  const departedTime = new Date(departedAt).getTime();
+  const totalMinutes = Math.floor((departedTime - arrivedTime) / 60000);
+  const billableMinutes = Math.max(0, totalMinutes - event.free_time_minutes);
+
+  // Calculate detention pay
+  const totalDetentionPay = (billableMinutes / 60) * event.hourly_rate;
+
+  await updateDetentionEvent(id, {
+    departed_at: departedAt,
+    billable_minutes: billableMinutes,
+    total_detention_pay: Math.round(totalDetentionPay * 100) / 100,
+    status: 'completed',
+  });
+
+  return getDetentionEventById(id);
+}
+
+export async function deleteDetentionEvent(id: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync('DELETE FROM detention_events WHERE id = ?', [id]);
+}
+
+// ============================================
 // SYNC OPERATIONS
 // ============================================
 

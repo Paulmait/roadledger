@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { COMPANY_INFO, LEGAL_VERSION } from '@/constants/legal';
 import { biometricService, type BiometricCapabilities } from '@/services/auth/biometricService';
+import { notificationService } from '@/services/notifications/notificationService';
 
 const COLORS = {
   background: '#0D1B2A',
@@ -50,6 +51,8 @@ export default function SettingsScreen() {
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricCapabilities, setBiometricCapabilities] = useState<BiometricCapabilities | null>(null);
+  const [iftaRemindersEnabled, setIftaRemindersEnabled] = useState(true);
+  const [dailySummaryEnabled, setDailySummaryEnabled] = useState(true);
 
   // Load biometric settings on mount
   useEffect(() => {
@@ -162,6 +165,28 @@ export default function SettingsScreen() {
     Linking.openURL(`mailto:${COMPANY_INFO.email}?subject=RoadLedger Support Request`);
   };
 
+  const handleIftaRemindersToggle = async (value: boolean) => {
+    setIftaRemindersEnabled(value);
+    if (value) {
+      await notificationService.scheduleIFTAReminders(7);
+      Alert.alert('Enabled', 'IFTA quarterly deadline reminders enabled. You\'ll be notified 7 days before each deadline.');
+    } else {
+      await notificationService.cancelNotificationsByTag('ifta');
+      Alert.alert('Disabled', 'IFTA reminders have been turned off.');
+    }
+  };
+
+  const handleDailySummaryToggle = async (value: boolean) => {
+    setDailySummaryEnabled(value);
+    if (value) {
+      await notificationService.scheduleDailySummary(20, 0);
+      Alert.alert('Enabled', 'Daily profit summary notifications enabled at 8 PM.');
+    } else {
+      await notificationService.cancelNotificationsByTag('daily_summary');
+      Alert.alert('Disabled', 'Daily summary notifications turned off.');
+    }
+  };
+
   const sections: SettingsSection[] = [
     {
       title: 'Account',
@@ -226,6 +251,25 @@ export default function SettingsScreen() {
             );
           },
           accessibilityLabel: 'Change your password',
+        },
+      ],
+    },
+    {
+      title: 'Notifications',
+      items: [
+        {
+          label: 'IFTA Deadline Reminders',
+          type: 'toggle',
+          value: iftaRemindersEnabled,
+          onToggle: handleIftaRemindersToggle,
+          accessibilityLabel: 'Toggle IFTA quarterly deadline reminders',
+        },
+        {
+          label: 'Daily Profit Summary',
+          type: 'toggle',
+          value: dailySummaryEnabled,
+          onToggle: handleDailySummaryToggle,
+          accessibilityLabel: 'Toggle daily profit summary notifications',
         },
       ],
     },

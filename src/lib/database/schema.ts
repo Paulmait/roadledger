@@ -126,6 +126,32 @@ async function initializeSchema(database: SQLite.SQLiteDatabase): Promise<void> 
       last_pull_at TEXT
     );
 
+    -- Detention events table (track wait time at shippers/receivers)
+    CREATE TABLE IF NOT EXISTS detention_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      trip_id TEXT,
+      location_type TEXT NOT NULL, -- 'pickup', 'delivery'
+      facility_name TEXT,
+      facility_address TEXT,
+      appointment_time TEXT,
+      arrived_at TEXT NOT NULL,
+      loading_started_at TEXT,
+      departed_at TEXT,
+      free_time_minutes INTEGER NOT NULL DEFAULT 120,
+      billable_minutes INTEGER,
+      hourly_rate REAL NOT NULL DEFAULT 50.0,
+      total_detention_pay REAL,
+      photo_evidence_path TEXT,
+      notes TEXT,
+      status TEXT NOT NULL DEFAULT 'active', -- 'active', 'completed', 'cancelled'
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT,
+      pending_sync INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE SET NULL
+    );
+
     -- Create indexes for performance
     CREATE INDEX IF NOT EXISTS idx_trips_user_status ON trips(user_id, status);
     CREATE INDEX IF NOT EXISTS idx_trips_pending ON trips(pending_sync) WHERE pending_sync = 1;
@@ -136,6 +162,8 @@ async function initializeSchema(database: SQLite.SQLiteDatabase): Promise<void> 
     CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
     CREATE INDEX IF NOT EXISTS idx_transactions_pending ON transactions(pending_sync) WHERE pending_sync = 1;
     CREATE INDEX IF NOT EXISTS idx_sync_queue_pending ON sync_queue(synced_at) WHERE synced_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_detention_user ON detention_events(user_id, status);
+    CREATE INDEX IF NOT EXISTS idx_detention_pending ON detention_events(pending_sync) WHERE pending_sync = 1;
   `);
 }
 

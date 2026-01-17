@@ -14,6 +14,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
     documents: '📄',
     transactions: '💰',
     exports: '📊',
+    detention: '⏱️',
     dev: '🔧',
   };
 
@@ -127,6 +128,13 @@ export default function TabsLayout() {
         }}
       />
       {/* Hidden screens - accessible via navigation but not in tab bar */}
+      <Tabs.Screen
+        name="detention"
+        options={{
+          href: null, // Hide from tab bar - accessed via dashboard
+          headerShown: false,
+        }}
+      />
       <Tabs.Screen
         name="subscription"
         options={{

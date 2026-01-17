@@ -401,6 +401,61 @@ export default function DashboardScreen() {
             <Text style={styles.actionText}>IFTA Report</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Detention Tracker Quick Access */}
+        <TouchableOpacity
+          style={styles.detentionButton}
+          onPress={() => router.push('/detention' as any)}
+        >
+          <Text style={styles.detentionIcon}>⏱️</Text>
+          <View style={styles.detentionContent}>
+            <Text style={styles.detentionTitle}>Detention Timer</Text>
+            <Text style={styles.detentionSubtitle}>Track wait time at facilities</Text>
+          </View>
+          <Text style={styles.detentionArrow}>→</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Quick Expenses */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Quick Expense</Text>
+        <View style={styles.expenseButtonsRow}>
+          <TouchableOpacity
+            style={styles.expenseButton}
+            onPress={() => router.push({ pathname: '/transactions/add' as any, params: { category: 'fuel' } })}
+          >
+            <Text style={styles.expenseButtonIcon}>⛽</Text>
+            <Text style={styles.expenseButtonText}>Fuel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.expenseButton}
+            onPress={() => router.push({ pathname: '/transactions/add' as any, params: { category: 'food' } })}
+          >
+            <Text style={styles.expenseButtonIcon}>🍔</Text>
+            <Text style={styles.expenseButtonText}>Food</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.expenseButton}
+            onPress={() => router.push({ pathname: '/transactions/add' as any, params: { category: 'tolls' } })}
+          >
+            <Text style={styles.expenseButtonIcon}>🛣️</Text>
+            <Text style={styles.expenseButtonText}>Tolls</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.expenseButton}
+            onPress={() => router.push({ pathname: '/transactions/add' as any, params: { category: 'parking' } })}
+          >
+            <Text style={styles.expenseButtonIcon}>🅿️</Text>
+            <Text style={styles.expenseButtonText}>Parking</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.expenseButton}
+            onPress={() => router.push({ pathname: '/transactions/add' as any, params: { category: 'scale' } })}
+          >
+            <Text style={styles.expenseButtonIcon}>⚖️</Text>
+            <Text style={styles.expenseButtonText}>Scale</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Recent Trips */}
@@ -775,6 +830,62 @@ const styles = StyleSheet.create({
   actionText: {
     color: COLORS.text,
     fontSize: 12,
+    textAlign: 'center',
+  },
+  detentionButton: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+  },
+  detentionIcon: {
+    fontSize: 28,
+    marginRight: 12,
+  },
+  detentionContent: {
+    flex: 1,
+  },
+  detentionTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  detentionSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  detentionArrow: {
+    color: COLORS.accent,
+    fontSize: 18,
+  },
+  expenseButtonsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  expenseButton: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    width: '18%',
+    minWidth: 60,
+    borderWidth: 1,
+    borderColor: COLORS.surfaceLight,
+  },
+  expenseButtonIcon: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  expenseButtonText: {
+    color: COLORS.text,
+    fontSize: 10,
     textAlign: 'center',
   },
   listItem: {

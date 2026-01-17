@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,17 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { format } from 'date-fns';
 import * as FileSystem from 'expo-file-system';
-import { getDocumentById, updateDocument, deleteDocument } from '@/lib/database';
+import { getDocumentById, updateDocument, deleteDocument, createTransaction } from '@/lib/database';
 import { supabase } from '@/lib/supabase/client';
-import { useProfile } from '@/stores/authStore';
+import { useProfile, useUser } from '@/stores/authStore';
 import { canAccessFeature, type SubscriptionTier } from '@/constants/pricing';
 import type { Document } from '@/types/database.types';
 
@@ -29,27 +33,125 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 export default function DocumentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const profile = useProfile();
+  const user = useUser();
   const [document, setDocument] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Edit modal state
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editField, setEditField] = useState<'vendor' | 'date' | 'amount' | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const loadDocument = useCallback(async () => {
+    if (!id) return;
+
+    try {
+      const doc = await getDocumentById(id);
+      setDocument(doc);
+    } catch (error) {
+      console.error('Failed to load document:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    async function loadDocument() {
-      if (!id) return;
+    loadDocument();
+  }, [loadDocument]);
 
-      try {
-        const doc = await getDocumentById(id);
-        setDocument(doc);
-      } catch (error) {
-        console.error('Failed to load document:', error);
-      } finally {
-        setLoading(false);
+  const handleEditField = (field: 'vendor' | 'date' | 'amount') => {
+    if (!document) return;
+
+    setEditField(field);
+    if (field === 'vendor') {
+      setEditValue(document.vendor || '');
+    } else if (field === 'date') {
+      setEditValue(document.document_date || '');
+    } else if (field === 'amount') {
+      setEditValue(document.total_amount?.toString() || '');
+    }
+    setEditModalVisible(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!document || !id || !editField) return;
+
+    setSaving(true);
+    try {
+      const updates: Partial<Document> = {};
+
+      if (editField === 'vendor') {
+        updates.vendor = editValue.trim() || null;
+      } else if (editField === 'date') {
+        // Validate date format
+        if (editValue && !/^\d{4}-\d{2}-\d{2}$/.test(editValue)) {
+          Alert.alert('Invalid Date', 'Please use format YYYY-MM-DD (e.g., 2026-01-17)');
+          setSaving(false);
+          return;
+        }
+        updates.document_date = editValue || null;
+      } else if (editField === 'amount') {
+        const amount = parseFloat(editValue);
+        if (editValue && (isNaN(amount) || amount < 0)) {
+          Alert.alert('Invalid Amount', 'Please enter a valid positive number');
+          setSaving(false);
+          return;
+        }
+        updates.total_amount = editValue ? amount : null;
       }
+
+      await updateDocument(id, updates);
+      await loadDocument();
+      setEditModalVisible(false);
+      Alert.alert('Saved', 'Document updated successfully.');
+    } catch (error) {
+      console.error('Failed to save edit:', error);
+      Alert.alert('Error', 'Failed to save changes.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateTransaction = async () => {
+    if (!document || !id || !user?.id) return;
+
+    if (!document.total_amount) {
+      Alert.alert('Missing Amount', 'Please add an amount before creating a transaction.');
+      return;
     }
 
-    loadDocument();
-  }, [id]);
+    Alert.alert(
+      'Create Transaction',
+      `Create an expense transaction for $${document.total_amount.toFixed(2)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Create',
+          onPress: async () => {
+            try {
+              await createTransaction(user.id, {
+                type: 'expense',
+                category: 'other',
+                amount: document.total_amount!,
+                date: document.document_date || new Date().toISOString().split('T')[0],
+                vendor: document.vendor || undefined,
+                description: `From ${DOC_TYPE_LABELS[document.type] || document.type}`,
+                source: 'document_ai',
+                document_id: id,
+              });
+              Alert.alert('Created', 'Transaction created successfully!');
+            } catch (error) {
+              console.error('Failed to create transaction:', error);
+              Alert.alert('Error', 'Failed to create transaction.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleUpload = async () => {
     if (!document || !id) return;
@@ -292,39 +394,102 @@ export default function DocumentDetailScreen() {
         </View>
       </View>
 
-      {/* Extracted Data */}
-      {document.parsed_status === 'parsed' && (
+      {/* Failed Extraction Error */}
+      {document.parsed_status === 'failed' && (
+        <View style={styles.errorSection}>
+          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorTitle}>Extraction Failed</Text>
+          <Text style={styles.errorMessage}>
+            We couldn't automatically extract data from this document. You can try again or enter the details manually below.
+          </Text>
+          <TouchableOpacity
+            style={[styles.retryButton, uploading && styles.buttonDisabled]}
+            onPress={handleUpload}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.retryButtonText}>Retry Extraction</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Extracted Data (Editable) */}
+      {(document.parsed_status === 'parsed' || document.parsed_status === 'failed') && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Extracted Data</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>
+              {document.parsed_status === 'parsed' ? 'Extracted Data' : 'Manual Entry'}
+            </Text>
+            <Text style={styles.editHint}>Tap to edit</Text>
+          </View>
 
-          {document.vendor && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Vendor</Text>
-              <Text style={styles.infoValue}>{document.vendor}</Text>
-            </View>
-          )}
-
-          {document.document_date && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Date</Text>
-              <Text style={styles.infoValue}>
-                {format(new Date(document.document_date), 'MMM d, yyyy')}
+          <TouchableOpacity
+            style={styles.editableRow}
+            onPress={() => handleEditField('vendor')}
+            accessibilityLabel="Edit vendor"
+            accessibilityRole="button"
+          >
+            <Text style={styles.infoLabel}>Vendor</Text>
+            <View style={styles.editableValue}>
+              <Text style={document.vendor ? styles.infoValue : styles.placeholderValue}>
+                {document.vendor || 'Tap to add'}
               </Text>
+              <Text style={styles.editIcon}>✏️</Text>
             </View>
-          )}
+          </TouchableOpacity>
 
+          <TouchableOpacity
+            style={styles.editableRow}
+            onPress={() => handleEditField('date')}
+            accessibilityLabel="Edit date"
+            accessibilityRole="button"
+          >
+            <Text style={styles.infoLabel}>Date</Text>
+            <View style={styles.editableValue}>
+              <Text style={document.document_date ? styles.infoValue : styles.placeholderValue}>
+                {document.document_date
+                  ? format(new Date(document.document_date), 'MMM d, yyyy')
+                  : 'Tap to add'}
+              </Text>
+              <Text style={styles.editIcon}>✏️</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.editableRow}
+            onPress={() => handleEditField('amount')}
+            accessibilityLabel="Edit amount"
+            accessibilityRole="button"
+          >
+            <Text style={styles.infoLabel}>Amount</Text>
+            <View style={styles.editableValue}>
+              <Text style={document.total_amount !== null ? styles.infoValueLarge : styles.placeholderValue}>
+                {document.total_amount !== null
+                  ? `$${document.total_amount.toFixed(2)} ${document.currency || 'USD'}`
+                  : 'Tap to add'}
+              </Text>
+              <Text style={styles.editIcon}>✏️</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Create Transaction Button */}
           {document.total_amount !== null && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Amount</Text>
-              <Text style={styles.infoValueLarge}>
-                ${document.total_amount.toFixed(2)} {document.currency}
-              </Text>
-            </View>
+            <TouchableOpacity
+              style={styles.createTransactionButton}
+              onPress={handleCreateTransaction}
+              accessibilityLabel="Create transaction from this document"
+              accessibilityRole="button"
+            >
+              <Text style={styles.createTransactionText}>+ Create Transaction</Text>
+            </TouchableOpacity>
           )}
 
           {document.extraction_json && (
             <View style={styles.extractionContainer}>
-              <Text style={styles.extractionTitle}>Raw Extraction</Text>
+              <Text style={styles.extractionTitle}>AI Extraction Details</Text>
               <Text style={styles.extractionJson}>
                 {JSON.stringify(document.extraction_json, null, 2)}
               </Text>
@@ -361,6 +526,68 @@ export default function DocumentDetailScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Edit Modal */}
+      <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Edit {editField === 'vendor' ? 'Vendor' : editField === 'date' ? 'Date' : 'Amount'}
+            </Text>
+
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                value={editValue}
+                onChangeText={setEditValue}
+                placeholder={
+                  editField === 'vendor'
+                    ? 'Enter vendor name'
+                    : editField === 'date'
+                    ? 'YYYY-MM-DD'
+                    : 'Enter amount'
+                }
+                placeholderTextColor="#666"
+                keyboardType={editField === 'amount' ? 'decimal-pad' : 'default'}
+                autoFocus
+              />
+              {editField === 'amount' && <Text style={styles.inputPrefix}>$</Text>}
+            </View>
+
+            {editField === 'date' && (
+              <Text style={styles.inputHint}>Format: YYYY-MM-DD (e.g., 2026-01-17)</Text>
+            )}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setEditModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveButton, saving && styles.buttonDisabled]}
+                onPress={handleSaveEdit}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   );
 }
@@ -507,5 +734,167 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+  // Error section styles
+  errorSection: {
+    backgroundColor: '#2d2d44',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+  },
+  errorIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  errorTitle: {
+    color: '#ef4444',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  errorMessage: {
+    color: '#888',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  retryButton: {
+    backgroundColor: '#4f46e5',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Editable row styles
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  editHint: {
+    color: '#666',
+    fontSize: 12,
+  },
+  editableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#3d3d5c',
+    minHeight: 48,
+  },
+  editableValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  placeholderValue: {
+    color: '#666',
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  editIcon: {
+    fontSize: 14,
+  },
+  createTransactionButton: {
+    backgroundColor: '#22c55e',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  createTransactionText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#2d2d44',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3d3d5c',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  input: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 18,
+    paddingVertical: 16,
+    minHeight: 56,
+  },
+  inputPrefix: {
+    color: '#888',
+    fontSize: 18,
+    marginRight: 8,
+    position: 'absolute',
+    left: 16,
+  },
+  inputHint: {
+    color: '#666',
+    fontSize: 12,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#3d3d5c',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: '#4f46e5',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

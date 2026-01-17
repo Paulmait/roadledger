@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useSyncStore } from '@/stores/syncStore';
 import { startSyncEngine } from '@/services/sync';
 import { analytics } from '@/services/analytics/analyticsService';
+import { notificationService } from '@/services/notifications/notificationService';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -55,6 +56,20 @@ export default function RootLayout() {
       } catch (error) {
         console.error('Analytics init error:', error);
       }
+
+      // Initialize push notifications and schedule IFTA reminders
+      try {
+        await notificationService.initialize();
+        const user = useAuthStore.getState().user;
+        if (user?.id) {
+          // Save push token and schedule IFTA reminders
+          await notificationService.savePushToken(user.id);
+          await notificationService.scheduleIFTAReminders(7); // 7 days before deadline
+          await notificationService.scheduleDailySummary(20, 0); // 8 PM daily summary
+        }
+      } catch (error) {
+        console.error('Notification init error:', error);
+      }
     }
 
     init();
@@ -63,6 +78,7 @@ export default function RootLayout() {
     return () => {
       try {
         analytics.shutdown();
+        notificationService.removeListeners();
       } catch (error) {
         // Ignore cleanup errors
       }
