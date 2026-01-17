@@ -22,7 +22,7 @@ import {
   useCurrentJurisdiction,
   useClearActiveTrip,
 } from '@/stores/tripStore';
-import { getUserTrips, getMonthlyTripCount } from '@/lib/database';
+import { getUserTrips, getMonthlyTripCount, createTrip as createManualTrip, updateTrip } from '@/lib/database';
 import { TRACKING_MODES, type TrackingMode } from '@/constants';
 import { getJurisdictionName } from '@/constants/jurisdictions';
 import {
@@ -69,6 +69,7 @@ export default function TripScreen() {
   const [isStarting, setIsStarting] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
   const [boundariesReady, setBoundariesReady] = useState(false);
+  const [isCreatingManual, setIsCreatingManual] = useState(false);
 
   // Ref to track last location for distance calculation
   const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -150,6 +151,69 @@ export default function TripScreen() {
     setRefreshing(true);
     await loadRecentTrips();
     setRefreshing(false);
+  };
+
+  const handleCreateManualTrip = async () => {
+    if (!user?.id) {
+      Alert.alert('Error', 'You must be logged in to create a trip');
+      return;
+    }
+
+    // Check subscription limits
+    const tier = (profile?.subscription_tier || 'free') as SubscriptionTier;
+    const tierDetails = getTierDetails(tier);
+    const tripLimit = tierDetails.limits.tripsPerMonth;
+
+    if (tripLimit !== -1) {
+      try {
+        const tripCount = await getMonthlyTripCount(user.id);
+        if (tripCount >= tripLimit) {
+          Alert.alert(
+            'Trip Limit Reached',
+            `Your ${tier} plan allows ${tripLimit} trips per month. Upgrade to Pro for unlimited trips.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Upgrade',
+                onPress: () => router.push('/(tabs)/subscription'),
+              },
+            ]
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to check trip count:', error);
+      }
+    }
+
+    setIsCreatingManual(true);
+
+    try {
+      const now = new Date().toISOString();
+      const trip = await createManualTrip(user.id, {
+        status: 'finalized',
+        loaded: false,
+        source: 'manual',
+        started_at: now,
+        ended_at: now,
+      });
+
+      // Navigate to trip detail to add mileage
+      router.push(`/(tabs)/trip/${trip.id}`);
+      Alert.alert(
+        'Manual Trip Created',
+        'Tap on "Add State" to enter your mileage by state.',
+        [{ text: 'Got it' }]
+      );
+
+      // Refresh the list
+      await loadRecentTrips();
+    } catch (error) {
+      console.error('Failed to create manual trip:', error);
+      Alert.alert('Error', 'Failed to create trip. Please try again.');
+    } finally {
+      setIsCreatingManual(false);
+    }
   };
 
   const handleStartTrip = async () => {
@@ -516,6 +580,30 @@ export default function TripScreen() {
               <Text style={styles.startButtonText}>Start Trip</Text>
             )}
           </TouchableOpacity>
+
+          {/* Manual Trip Entry */}
+          <View style={styles.dividerContainer}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.divider} />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.manualButton, isCreatingManual && styles.buttonDisabled]}
+            onPress={handleCreateManualTrip}
+            disabled={isCreatingManual}
+            accessibilityLabel="Log manual trip"
+            accessibilityRole="button"
+          >
+            {isCreatingManual ? (
+              <ActivityIndicator color="#4f46e5" />
+            ) : (
+              <>
+                <Text style={styles.manualButtonText}>Log Manual Trip</Text>
+                <Text style={styles.manualButtonHint}>Enter miles without GPS tracking</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       )}
 
@@ -795,5 +883,40 @@ const styles = StyleSheet.create({
   tripCardBadgeText: {
     color: '#888',
     fontSize: 12,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#3d3d5c',
+  },
+  dividerText: {
+    color: '#666',
+    fontSize: 12,
+    marginHorizontal: 12,
+  },
+  manualButton: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4f46e5',
+    minHeight: 60,
+    justifyContent: 'center',
+  },
+  manualButtonText: {
+    color: '#4f46e5',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  manualButtonHint: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 4,
   },
 });
