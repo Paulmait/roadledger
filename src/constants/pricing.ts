@@ -36,12 +36,12 @@ export const PRICING_TIERS = {
     appleProductIdYearly: 'com.roadledger.pro.yearly',
     features: [
       'Unlimited trip tracking',
-      'AI receipt scanning (unlimited)',
-      'IFTA reports',
+      'AI receipt scanning',
+      'IFTA quarterly reports',
       'Profit per mile tracking',
       'Expense categorization',
       'Offline mode',
-      'Export to CSV/PDF',
+      'Tax summary exports',
     ],
     limits: {
       tripsPerMonth: -1, // unlimited
@@ -62,12 +62,11 @@ export const PRICING_TIERS = {
     features: [
       'Everything in Pro',
       'Unlimited AI profit insights',
-      'AI-powered tax recommendations',
-      'Fuel price optimization alerts',
-      'Lane profitability analysis',
-      'Priority support',
-      'Settlement tracking',
-      'Multi-vehicle support',
+      'AI-powered recommendations',
+      'Fuel price optimization',
+      'Route profitability analysis',
+      'Settlement document scanning',
+      'Priority email support',
     ],
     limits: {
       tripsPerMonth: -1,

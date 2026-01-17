@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,14 +12,59 @@ import {
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
+import { biometricService, type BiometricCapabilities } from '@/services/auth/biometricService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const STORED_EMAIL_KEY = 'last_logged_in_email';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricType, setBiometricType] = useState('');
   const signIn = useAuthStore((state) => state.signIn);
   const isLoading = useAuthStore((state) => state.isLoading);
   const error = useAuthStore((state) => state.error);
   const clearError = useAuthStore((state) => state.clearError);
+
+  // Check biometric availability and auto-prompt on mount
+  useEffect(() => {
+    const checkBiometric = async () => {
+      const capabilities = await biometricService.checkCapabilities();
+      const enabled = await biometricService.isEnabled();
+      const storedEmail = await AsyncStorage.getItem(STORED_EMAIL_KEY);
+
+      if (capabilities.isAvailable && enabled && storedEmail) {
+        setBiometricAvailable(true);
+        setBiometricType(capabilities.biometricTypeName);
+        setEmail(storedEmail);
+
+        // Auto-prompt biometric on launch
+        handleBiometricLogin();
+      } else if (capabilities.isAvailable && enabled) {
+        setBiometricAvailable(true);
+        setBiometricType(capabilities.biometricTypeName);
+      }
+    };
+    checkBiometric();
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    const storedEmail = await AsyncStorage.getItem(STORED_EMAIL_KEY);
+    if (!storedEmail) {
+      Alert.alert('Setup Required', 'Please sign in with your email and password first, then enable biometric login in Settings.');
+      return;
+    }
+
+    const result = await biometricService.authenticate('Sign in to RoadLedger');
+    if (result.success) {
+      // Biometric verified - we trust the stored session
+      // The auth store should have a persisted session
+      router.replace('/(tabs)');
+    } else if (result.error && result.error !== 'Authentication cancelled') {
+      Alert.alert('Authentication Failed', result.error);
+    }
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -30,6 +75,10 @@ export default function LoginScreen() {
     try {
       clearError();
       await signIn(email.trim(), password);
+
+      // Save email for biometric login
+      await AsyncStorage.setItem(STORED_EMAIL_KEY, email.trim());
+
       router.replace('/(tabs)');
     } catch (err) {
       // Error is handled by the store
@@ -101,6 +150,20 @@ export default function LoginScreen() {
               <Text style={styles.buttonText}>Sign In</Text>
             )}
           </TouchableOpacity>
+
+          {/* Biometric Login Button */}
+          {biometricAvailable && (
+            <TouchableOpacity
+              style={styles.biometricButton}
+              onPress={handleBiometricLogin}
+              disabled={isLoading}
+            >
+              <Text style={styles.biometricIcon}>
+                {biometricType.includes('Face') ? '👤' : '👆'}
+              </Text>
+              <Text style={styles.biometricText}>Sign in with {biometricType}</Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
@@ -210,5 +273,25 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     textAlign: 'center',
+  },
+  biometricButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#4f46e5',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    gap: 8,
+  },
+  biometricIcon: {
+    fontSize: 20,
+  },
+  biometricText: {
+    color: '#4f46e5',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

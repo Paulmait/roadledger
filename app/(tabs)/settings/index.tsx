@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { COMPANY_INFO, LEGAL_VERSION } from '@/constants/legal';
+import { biometricService, type BiometricCapabilities } from '@/services/auth/biometricService';
 
 const COLORS = {
   background: '#0D1B2A',
@@ -47,6 +48,39 @@ export default function SettingsScreen() {
   const user = useAuthStore((state) => state.user);
   const [loading, setLoading] = useState(false);
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricCapabilities, setBiometricCapabilities] = useState<BiometricCapabilities | null>(null);
+
+  // Load biometric settings on mount
+  useEffect(() => {
+    const loadBiometricSettings = async () => {
+      const capabilities = await biometricService.checkCapabilities();
+      setBiometricCapabilities(capabilities);
+
+      if (capabilities.isAvailable) {
+        const enabled = await biometricService.isEnabled();
+        setBiometricEnabled(enabled);
+      }
+    };
+    loadBiometricSettings();
+  }, []);
+
+  const handleBiometricToggle = async (value: boolean) => {
+    if (value) {
+      // Test biometric before enabling
+      const result = await biometricService.authenticate('Confirm to enable biometric login');
+      if (result.success) {
+        await biometricService.setEnabled(true);
+        setBiometricEnabled(true);
+        Alert.alert('Enabled', `${biometricCapabilities?.biometricTypeName} login enabled.`);
+      } else {
+        Alert.alert('Failed', result.error || 'Could not enable biometric login.');
+      }
+    } else {
+      await biometricService.setEnabled(false);
+      setBiometricEnabled(false);
+    }
+  };
 
   const handleSignOut = async () => {
     Alert.alert(
@@ -149,6 +183,49 @@ export default function SettingsScreen() {
           type: 'link',
           onPress: () => router.push('/(tabs)/subscription'),
           accessibilityLabel: 'View subscription plans',
+        },
+      ],
+    },
+    {
+      title: 'Security',
+      items: [
+        ...(biometricCapabilities?.isAvailable
+          ? [
+              {
+                label: `${biometricCapabilities.biometricTypeName} Login`,
+                type: 'toggle' as const,
+                value: biometricEnabled,
+                onToggle: handleBiometricToggle,
+                accessibilityLabel: `Toggle ${biometricCapabilities.biometricTypeName} login`,
+              },
+            ]
+          : []),
+        {
+          label: 'Change Password',
+          type: 'link' as const,
+          onPress: () => {
+            Alert.alert(
+              'Change Password',
+              'We will send a password reset link to your email.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Send Link',
+                  onPress: async () => {
+                    if (user?.email) {
+                      const { error } = await supabase.auth.resetPasswordForEmail(user.email);
+                      if (error) {
+                        Alert.alert('Error', 'Failed to send reset email.');
+                      } else {
+                        Alert.alert('Sent', 'Check your email for the reset link.');
+                      }
+                    }
+                  },
+                },
+              ]
+            );
+          },
+          accessibilityLabel: 'Change your password',
         },
       ],
     },

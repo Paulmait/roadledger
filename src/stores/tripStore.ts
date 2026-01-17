@@ -319,3 +319,4 @@ export const useActiveTrip = () => useTripStore((state) => state.activeTrip);
 export const useIsTracking = () => useTripStore((state) => state.isTracking);
 export const useTrackingMode = () => useTripStore((state) => state.trackingMode);
 export const useCurrentJurisdiction = () => useTripStore((state) => state.currentJurisdiction);
+export const useClearActiveTrip = () => useTripStore((state) => state.clearActiveTrip);

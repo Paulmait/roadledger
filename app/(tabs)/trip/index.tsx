@@ -20,6 +20,7 @@ import {
   useIsTracking,
   useTrackingMode,
   useCurrentJurisdiction,
+  useClearActiveTrip,
 } from '@/stores/tripStore';
 import { getUserTrips, getMonthlyTripCount } from '@/lib/database';
 import { TRACKING_MODES, type TrackingMode } from '@/constants';
@@ -52,6 +53,7 @@ export default function TripScreen() {
   const endTrip = useTripStore((state) => state.endTrip);
   const pauseTrip = useTripStore((state) => state.pauseTrip);
   const resumeTrip = useTripStore((state) => state.resumeTrip);
+  const clearActiveTrip = useClearActiveTrip();
   const setTrackingMode = useTripStore((state) => state.setTrackingMode);
   const addPoint = useTripStore((state) => state.addPoint);
   const updateJurisdictionMiles = useTripStore((state) => state.updateJurisdictionMiles);
@@ -437,6 +439,37 @@ export default function TripScreen() {
               </>
             )}
           </View>
+
+          {/* Abandon Trip Option (for orphaned trips) */}
+          {!isTracking && (
+            <TouchableOpacity
+              style={styles.abandonButton}
+              onPress={() => {
+                Alert.alert(
+                  'Abandon Trip?',
+                  'This will delete this trip without saving. Are you sure?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Abandon',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await stopLocationTracking();
+                          clearActiveTrip();
+                          Alert.alert('Trip Abandoned', 'You can now start a new trip.');
+                        } catch (error) {
+                          Alert.alert('Error', 'Failed to abandon trip.');
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <Text style={styles.abandonButtonText}>Abandon & Start Fresh</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         /* Start New Trip */
@@ -645,6 +678,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  abandonButton: {
+    marginTop: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3d3d5c',
+    borderRadius: 8,
+  },
+  abandonButtonText: {
+    color: '#888',
+    fontSize: 14,
   },
   startTripSection: {
     backgroundColor: '#2d2d44',
