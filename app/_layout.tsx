@@ -31,20 +31,29 @@ export default function RootLayout() {
   useEffect(() => {
     async function init() {
       try {
-        // Initialize auth
+        // Initialize auth first (critical)
         await initialize();
         // Check network status
         await checkNetworkStatus();
-        // Start sync engine for offline support
-        await startSyncEngine();
-        // Initialize analytics
-        const user = useAuthStore.getState().user;
-        await analytics.initialize(user?.id);
       } catch (error) {
         console.error('Initialization error:', error);
       } finally {
-        // Hide splash screen
+        // Hide splash screen regardless of errors
         await SplashScreen.hideAsync();
+      }
+
+      // Non-critical initialization (don't block app startup)
+      try {
+        await startSyncEngine();
+      } catch (error) {
+        console.error('Sync engine init error:', error);
+      }
+
+      try {
+        const user = useAuthStore.getState().user;
+        await analytics.initialize(user?.id);
+      } catch (error) {
+        console.error('Analytics init error:', error);
       }
     }
 
@@ -52,7 +61,11 @@ export default function RootLayout() {
 
     // Cleanup on unmount
     return () => {
-      analytics.shutdown();
+      try {
+        analytics.shutdown();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
     };
   }, [initialize, checkNetworkStatus]);
 

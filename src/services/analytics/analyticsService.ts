@@ -299,13 +299,14 @@ class AnalyticsService {
    */
   private async collectDeviceInfo(): Promise<void> {
     try {
-      const { Dimensions } = await import('react-native');
+      // Import Dimensions statically to avoid dynamic import issues
+      const { Dimensions } = require('react-native');
       const { width, height } = Dimensions.get('window');
-      const { NativeModules } = await import('react-native');
 
       // Get locale safely
       let locale = 'en-US';
       try {
+        const { NativeModules } = require('react-native');
         if (Platform.OS === 'ios') {
           locale = NativeModules.SettingsManager?.settings?.AppleLocale ||
                    NativeModules.SettingsManager?.settings?.AppleLanguages?.[0] ||
@@ -329,13 +330,13 @@ class AnalyticsService {
         platform: Platform.OS,
         osVersion: Platform.Version?.toString() || 'unknown',
         deviceModel: Device.modelName || 'unknown',
-        deviceBrand: Device.brand,
-        deviceType: Device.deviceType ? String(Device.deviceType) : null,
-        isDevice: Device.isDevice,
+        deviceBrand: Device.brand || null,
+        deviceType: Device.deviceType !== undefined ? String(Device.deviceType) : null,
+        isDevice: Device.isDevice ?? true,
         appVersion: Application.nativeApplicationVersion || '1.0.0',
         buildNumber: Application.nativeBuildVersion || '1',
-        screenWidth: Math.round(width),
-        screenHeight: Math.round(height),
+        screenWidth: Math.round(width || 0),
+        screenHeight: Math.round(height || 0),
         locale,
         timezone,
       };

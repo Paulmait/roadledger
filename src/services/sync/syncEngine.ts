@@ -26,21 +26,36 @@ let isSyncing = false;
 
 // Start the sync engine
 export async function startSyncEngine(): Promise<void> {
-  // Initial sync check
-  await checkAndSync();
+  try {
+    // Initial sync check (don't fail if this errors)
+    await checkAndSync().catch((err) => {
+      console.log('Initial sync check failed:', err);
+    });
 
-  // Set up periodic sync
-  setInterval(async () => {
-    await checkAndSync();
-  }, SYNC_CONFIG.syncIntervalMs);
+    // Set up periodic sync
+    setInterval(async () => {
+      try {
+        await checkAndSync();
+      } catch (err) {
+        console.log('Periodic sync failed:', err);
+      }
+    }, SYNC_CONFIG.syncIntervalMs);
 
-  // Set up network change listener
-  Network.addNetworkStateListener(async (state) => {
-    if (state.isConnected) {
-      console.log('Network connected, triggering sync');
-      await checkAndSync();
-    }
-  });
+    // Set up network change listener
+    Network.addNetworkStateListener(async (state) => {
+      if (state.isConnected) {
+        console.log('Network connected, triggering sync');
+        try {
+          await checkAndSync();
+        } catch (err) {
+          console.log('Network reconnect sync failed:', err);
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Failed to start sync engine:', error);
+    // Don't throw - allow app to continue without sync
+  }
 }
 
 // Check network and sync if online
