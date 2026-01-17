@@ -1,7 +1,7 @@
 # RoadLedger Development Guide
 
-**Last Updated:** January 17, 2026
-**Target Launch:** January 17, 2026
+**Last Updated:** January 16, 2026
+**Target Launch:** January 16, 2026
 **Version:** 1.0.0
 **Status:** PRODUCTION READY - Security Hardened
 
@@ -289,6 +289,8 @@ All assets are in `assets/appstore/`:
 - [x] Implement subscription tier enforcement (free tier limits enforced)
 - [x] Wire document upload to AI extraction edge function
 - [x] Wire export generation to IFTA/tax edge functions
+- [x] Fix app startup crash (resilient initialization)
+- [x] Fix pricing display ($14.99/$29.99 now showing correctly)
 - [ ] Upload build to App Store Connect
 - [ ] Final end-to-end testing on physical devices
 
@@ -547,9 +549,34 @@ CREATE TABLE maintenance_reminders (
 
 ---
 
-## Recent Changes (Jan 17, 2026)
+## Recent Changes (Jan 16, 2026)
 
-### Subscription Management System (NEW)
+### Critical Bug Fixes
+1. **App Startup Crash Fixed** - Made initialization more resilient
+   - Separated critical (auth) from non-critical (analytics, sync) initialization
+   - Non-critical failures no longer prevent app startup
+   - Fixed dynamic imports in analytics service causing crashes
+   - Changed from `await import('react-native')` to `require('react-native')`
+   - Added null safety for Device properties in analytics
+
+2. **Pricing Display Fixed** - Subscription screen now shows correct prices
+   - Was showing effective monthly cost ($119.99/12 = ~$10) instead of actual price
+   - Now shows: Pro $14.99/mo, Premium $29.99/mo
+   - When yearly billing selected, shows monthly price with yearly savings noted separately
+
+3. **Sync Engine Resilience** - Added error handling to prevent cascade failures
+   - Initial sync check failures don't crash the app
+   - Periodic sync failures are logged but don't propagate
+   - Network reconnect sync wrapped in try-catch
+
+### Revenue Projection Document
+- Created `REVENUE_PROJECTION.md` with conservative 3-year estimates
+- Year 1: $71,940 | Year 2: $453,600 | Year 3: $1,620,000
+- Includes market analysis, pricing strategy, cost projections
+
+### Previous Changes (Jan 17, 2026)
+
+### Subscription Management System
 1. **Usage Limit Warnings** - `UsageBanner` component shows progress on Dashboard
 2. **useUsageLimits hook** - Tracks trips/documents usage, provides upgrade prompts
 3. **One-Click Cancellation** - "Manage Subscription" button links to App Store (legal requirement)
