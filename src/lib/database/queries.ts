@@ -16,22 +16,6 @@ const uuidv4 = () => Crypto.randomUUID();
 // TRIP OPERATIONS
 // ============================================
 
-/**
- * Count trips created this month for a user (for free tier limit enforcement)
- */
-export async function getMonthlyTripCount(userId: string): Promise<number> {
-  const db = await getDatabase();
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-  const result = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM trips WHERE user_id = ? AND created_at >= ?`,
-    [userId, startOfMonth]
-  );
-
-  return result?.count || 0;
-}
-
 export async function createTrip(
   userId: string,
   data: Partial<Trip>

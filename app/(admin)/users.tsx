@@ -34,6 +34,14 @@ interface User {
   created_at: string;
   last_login: string | null;
   trip_count: number;
+  doc_count: number;
+  monthly_trips: number;
+  monthly_docs: number;
+}
+
+interface UserDetailModal {
+  visible: boolean;
+  user: User | null;
 }
 
 export default function AdminUsersScreen() {
@@ -42,6 +50,7 @@ export default function AdminUsersScreen() {
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTier, setFilterTier] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -63,29 +72,173 @@ export default function AdminUsersScreen() {
 
       if (error) throw error;
 
-      // Get trip counts for each user
-      const usersWithTrips = await Promise.all(
+      // Get counts for each user (trips, documents, monthly usage)
+      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+
+      const usersWithStats = await Promise.all(
         (data || []).map(async (user) => {
-          const { count } = await supabase
-            .from('trips')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id);
+          const [tripResult, docResult, monthlyTripResult, monthlyDocResult] = await Promise.all([
+            supabase.from('trips').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+            supabase.from('documents').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+            supabase.from('trips').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('started_at', startOfMonth),
+            supabase.from('documents').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('uploaded_at', startOfMonth),
+          ]);
 
           return {
             ...user,
             email: user.email || 'N/A',
-            trip_count: count || 0,
+            trip_count: tripResult.count || 0,
+            doc_count: docResult.count || 0,
+            monthly_trips: monthlyTripResult.count || 0,
+            monthly_docs: monthlyDocResult.count || 0,
           };
         })
       );
 
-      setUsers(usersWithTrips);
+      setUsers(usersWithStats);
     } catch (error) {
       console.error('Failed to load users:', error);
     } finally {
       setLoading(false);
     }
   }, [searchQuery, filterTier]);
+
+  // Admin action: Log admin actions for audit trail
+  const logAdminAction = async (action: string, targetUserId: string, details: string) => {
+    try {
+      const { data: { user: adminUser } } = await supabase.auth.getUser();
+      if (adminUser) {
+        await supabase.from('admin_audit_log').insert({
+          admin_id: adminUser.id,
+          action,
+          target_entity: 'user',
+          target_id: targetUserId,
+          details,
+          ip_address: 'admin-panel',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to log admin action:', error);
+    }
+  };
+
+  // Admin action: Reset user's monthly usage counters
+  const handleResetUsage = async (user: User) => {
+    Alert.alert(
+      'Reset Monthly Usage',
+      `This will reset ${user.full_name || user.email}'s monthly trip and document counters. This is useful if a user had technical issues that consumed their free quota.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset Usage',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Log the action
+              await logAdminAction('reset_usage', user.id, `Reset monthly usage for ${user.email}`);
+
+              // Note: Since we count from database, we can add a usage_reset_at timestamp
+              await supabase
+                .from('profiles')
+                .update({ usage_reset_at: new Date().toISOString() })
+                .eq('id', user.id);
+
+              Alert.alert('Success', 'User usage has been reset. They can now use their monthly quota again.');
+              loadUsers();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to reset usage.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Admin action: Grant trial/comp subscription
+  const handleGrantTrial = async (user: User, days: number, tier: string) => {
+    Alert.alert(
+      `Grant ${days}-Day ${tier.charAt(0).toUpperCase() + tier.slice(1)} Trial`,
+      `This will grant ${user.full_name || user.email} a ${days}-day complimentary ${tier} subscription.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Grant Trial',
+          onPress: async () => {
+            try {
+              const expiryDate = new Date();
+              expiryDate.setDate(expiryDate.getDate() + days);
+
+              // Update profile tier
+              await supabase
+                .from('profiles')
+                .update({ subscription_tier: tier })
+                .eq('id', user.id);
+
+              // Create/update subscription record
+              await supabase.from('subscriptions').upsert({
+                user_id: user.id,
+                tier,
+                status: 'trial',
+                current_period_start: new Date().toISOString(),
+                current_period_end: expiryDate.toISOString(),
+                cancel_at_period_end: true, // Will downgrade after trial
+              });
+
+              await logAdminAction('grant_trial', user.id, `Granted ${days}-day ${tier} trial to ${user.email}`);
+
+              Alert.alert('Success', `${days}-day ${tier} trial granted.`);
+              loadUsers();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to grant trial.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Admin action: View user details
+  const showUserDetails = (user: User) => {
+    const tierLimits = {
+      free: { trips: 5, docs: 3 },
+      pro: { trips: 'Unlimited', docs: 'Unlimited' },
+      premium: { trips: 'Unlimited', docs: 'Unlimited' },
+    };
+    const limits = tierLimits[user.subscription_tier as keyof typeof tierLimits] || tierLimits.free;
+
+    Alert.alert(
+      `User: ${user.full_name || 'No Name'}`,
+      `Email: ${user.email}\n` +
+      `Tier: ${user.subscription_tier.toUpperCase()}\n` +
+      `Joined: ${format(new Date(user.created_at), 'MMM d, yyyy')}\n` +
+      `Last Login: ${user.last_login ? format(new Date(user.last_login), 'MMM d, yyyy h:mm a') : 'Never'}\n\n` +
+      `--- All Time ---\n` +
+      `Total Trips: ${user.trip_count}\n` +
+      `Total Documents: ${user.doc_count}\n\n` +
+      `--- This Month ---\n` +
+      `Trips: ${user.monthly_trips} / ${limits.trips}\n` +
+      `Documents: ${user.monthly_docs} / ${limits.docs}`,
+      [
+        { text: 'Close', style: 'cancel' },
+        { text: 'Reset Usage', onPress: () => handleResetUsage(user) },
+        { text: 'Grant Trial', onPress: () => showTrialOptions(user) },
+      ]
+    );
+  };
+
+  // Show trial duration options
+  const showTrialOptions = (user: User) => {
+    Alert.alert(
+      'Grant Trial',
+      'Select trial duration:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: '7 Days Pro', onPress: () => handleGrantTrial(user, 7, 'pro') },
+        { text: '14 Days Pro', onPress: () => handleGrantTrial(user, 14, 'pro') },
+        { text: '30 Days Premium', onPress: () => handleGrantTrial(user, 30, 'premium') },
+      ]
+    );
+  };
 
   useEffect(() => {
     loadUsers();
@@ -203,7 +356,12 @@ export default function AdminUsersScreen() {
           </View>
         ) : (
           users.map((user) => (
-            <View key={user.id} style={styles.userCard}>
+            <TouchableOpacity
+              key={user.id}
+              style={styles.userCard}
+              onPress={() => showUserDetails(user)}
+              activeOpacity={0.7}
+            >
               <View style={styles.userInfo}>
                 <Text style={styles.userName}>
                   {user.full_name || 'No name'}
@@ -216,7 +374,27 @@ export default function AdminUsersScreen() {
                   <Text style={styles.userMetaText}>
                     Trips: {user.trip_count}
                   </Text>
+                  <Text style={styles.userMetaText}>
+                    Docs: {user.doc_count}
+                  </Text>
                 </View>
+                {/* Monthly usage for free tier */}
+                {user.subscription_tier === 'free' && (
+                  <View style={styles.usageIndicator}>
+                    <Text style={[
+                      styles.usageText,
+                      user.monthly_trips >= 5 && styles.usageTextWarning
+                    ]}>
+                      {user.monthly_trips}/5 trips
+                    </Text>
+                    <Text style={[
+                      styles.usageText,
+                      user.monthly_docs >= 3 && styles.usageTextWarning
+                    ]}>
+                      {user.monthly_docs}/3 docs
+                    </Text>
+                  </View>
+                )}
               </View>
 
               <View style={styles.userActions}>
@@ -244,8 +422,15 @@ export default function AdminUsersScreen() {
                     ) : null
                   )}
                 </View>
+
+                <TouchableOpacity
+                  style={styles.detailsButton}
+                  onPress={() => showUserDetails(user)}
+                >
+                  <Text style={styles.detailsButtonText}>Details</Text>
+                </TouchableOpacity>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -369,5 +554,35 @@ const styles = StyleSheet.create({
   tierButtonText: {
     color: COLORS.textSecondary,
     fontSize: 10,
+  },
+  usageIndicator: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 6,
+  },
+  usageText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    backgroundColor: COLORS.surfaceLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  usageTextWarning: {
+    color: COLORS.loss,
+    backgroundColor: 'rgba(231, 76, 60, 0.2)',
+  },
+  detailsButton: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: COLORS.primary,
+    borderRadius: 4,
+    alignItems: 'center',
+  },
+  detailsButtonText: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: '500',
   },
 });

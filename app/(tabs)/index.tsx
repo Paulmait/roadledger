@@ -16,6 +16,7 @@ import { getUserTransactions, getUserTrips } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 import type { Transaction, Trip } from '@/types/database.types';
 import { format } from 'date-fns';
+import { UsageBanner } from '@/components/UsageBanner';
 
 // Brand colors
 const COLORS = {
@@ -250,6 +251,9 @@ export default function DashboardScreen() {
           {isOnline ? 'Online' : 'Offline'} • {syncStatus}
         </Text>
       </View>
+
+      {/* Usage Banner - Shows for free tier users approaching limits */}
+      <UsageBanner />
 
       {/* PROFIT-FIRST: Hero Metrics Card */}
       <View style={styles.profitCard}>

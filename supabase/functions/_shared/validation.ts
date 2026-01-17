@@ -162,3 +162,97 @@ export function truncateExtractionJson(data: unknown): unknown {
     data: JSON.parse(json.substring(0, MAX_EXTRACTION_JSON_SIZE - 100) + '"}'),
   };
 }
+
+/**
+ * Tier limits configuration
+ */
+export const TIER_LIMITS = {
+  free: {
+    tripsPerMonth: 5,
+    documentsPerMonth: 3,
+    aiInsightsPerMonth: 0,
+    exportsPerMonth: 1,
+  },
+  pro: {
+    tripsPerMonth: -1, // unlimited
+    documentsPerMonth: -1,
+    aiInsightsPerMonth: 10,
+    exportsPerMonth: -1,
+  },
+  premium: {
+    tripsPerMonth: -1,
+    documentsPerMonth: -1,
+    aiInsightsPerMonth: -1,
+    exportsPerMonth: -1,
+  },
+} as const;
+
+export type SubscriptionTier = keyof typeof TIER_LIMITS;
+
+/**
+ * Check if user has exceeded their tier limits
+ * Returns null if within limits, or an error message if exceeded
+ */
+export async function checkTierLimit(
+  supabaseClient: { from: (table: string) => { select: (columns: string, options?: { count: string; head: boolean }) => { eq: (col: string, val: string) => { gte: (col: string, val: string) => Promise<{ count: number | null }> } } } },
+  userId: string,
+  tier: string,
+  limitType: 'trips' | 'documents' | 'aiInsights' | 'exports'
+): Promise<{ allowed: true } | { allowed: false; error: string; limitReached: number }> {
+  const tierKey = (tier || 'free') as SubscriptionTier;
+  const limits = TIER_LIMITS[tierKey] || TIER_LIMITS.free;
+
+  const limitMap = {
+    trips: limits.tripsPerMonth,
+    documents: limits.documentsPerMonth,
+    aiInsights: limits.aiInsightsPerMonth,
+    exports: limits.exportsPerMonth,
+  };
+
+  const limit = limitMap[limitType];
+
+  // -1 means unlimited
+  if (limit === -1) {
+    return { allowed: true };
+  }
+
+  // Get start of current month
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  // Table and column mappings
+  const tableMap = {
+    trips: { table: 'trips', dateCol: 'started_at' },
+    documents: { table: 'documents', dateCol: 'uploaded_at' },
+    aiInsights: { table: 'ai_insights', dateCol: 'created_at' },
+    exports: { table: 'exports', dateCol: 'created_at' },
+  };
+
+  const { table, dateCol } = tableMap[limitType];
+
+  // Count this month's usage
+  const { count } = await supabaseClient
+    .from(table)
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte(dateCol, startOfMonth);
+
+  const currentCount = count || 0;
+
+  if (currentCount >= limit) {
+    const featureNames = {
+      trips: 'trips',
+      documents: 'document uploads',
+      aiInsights: 'AI insights',
+      exports: 'exports',
+    };
+
+    return {
+      allowed: false,
+      error: `You've reached your monthly limit of ${limit} ${featureNames[limitType]}. Upgrade to Pro for unlimited access.`,
+      limitReached: limit,
+    };
+  }
+
+  return { allowed: true };
+}

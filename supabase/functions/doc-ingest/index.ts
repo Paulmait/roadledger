@@ -12,6 +12,7 @@ import {
   validateAmount,
   validateDateString,
   truncateExtractionJson,
+  checkTierLimit,
   ALLOWED_DOCUMENT_TYPES,
   MAX_FILE_SIZE_BYTES,
 } from '../_shared/validation.ts';
@@ -118,6 +119,32 @@ serve(async (req) => {
     if (rateLimitOk === false) {
       console.warn(`[${requestId}] Rate limit exceeded for user ${user.id}`);
       return safeErrorResponse('Rate limit exceeded. Please try again later.', 429, corsHeaders);
+    }
+
+    // Get user's subscription tier from profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('subscription_tier')
+      .eq('id', user.id)
+      .single();
+
+    const userTier = profile?.subscription_tier || 'free';
+
+    // Check tier-based document limit (server-side enforcement)
+    const tierCheck = await checkTierLimit(supabase, user.id, userTier, 'documents');
+    if (!tierCheck.allowed) {
+      console.warn(`[${requestId}] Tier limit reached for user ${user.id}: ${tierCheck.error}`);
+      return new Response(
+        JSON.stringify({
+          error: tierCheck.error,
+          limitReached: true,
+          upgradeRequired: true,
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
     // Parse and validate request body

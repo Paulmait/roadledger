@@ -322,6 +322,143 @@ class NotificationService {
   getToken(): string | null {
     return this.expoPushToken;
   }
+
+  /**
+   * Schedule subscription renewal reminder
+   * @param expiryDate - When the subscription expires
+   * @param daysBefore - Days before expiry to send reminder
+   */
+  async scheduleRenewalReminder(expiryDate: Date, daysBefore: number = 3): Promise<void> {
+    // Cancel existing renewal reminders
+    await this.cancelNotificationsByTag('subscription_renewal');
+
+    const reminderDate = new Date(expiryDate);
+    reminderDate.setDate(reminderDate.getDate() - daysBefore);
+
+    // Only schedule if reminder is in the future
+    if (reminderDate > new Date()) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Subscription Renewing Soon',
+          body: `Your RoadLedger subscription will automatically renew on ${expiryDate.toLocaleDateString()}. Manage your subscription in Settings.`,
+          data: { type: 'subscription_renewal' },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: reminderDate,
+          channelId: 'payments',
+        },
+      });
+    }
+  }
+
+  /**
+   * Schedule subscription expiry warning (for cancelled subscriptions)
+   * @param expiryDate - When access expires
+   */
+  async scheduleExpiryWarning(expiryDate: Date): Promise<void> {
+    // Cancel existing expiry warnings
+    await this.cancelNotificationsByTag('subscription_expiry');
+
+    // 7 days before
+    const weekBefore = new Date(expiryDate);
+    weekBefore.setDate(weekBefore.getDate() - 7);
+
+    if (weekBefore > new Date()) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Subscription Ending Soon',
+          body: 'Your Pro access expires in 7 days. Renew now to keep unlimited trips and IFTA reports.',
+          data: { type: 'subscription_expiry', action: 'renew' },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: weekBefore,
+          channelId: 'payments',
+        },
+      });
+    }
+
+    // 1 day before
+    const dayBefore = new Date(expiryDate);
+    dayBefore.setDate(dayBefore.getDate() - 1);
+
+    if (dayBefore > new Date()) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Last Day of Pro Access',
+          body: 'Your Pro subscription expires tomorrow. Renew now to avoid losing your unlimited features.',
+          data: { type: 'subscription_expiry', action: 'renew', urgent: true },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: dayBefore,
+          channelId: 'payments',
+        },
+      });
+    }
+  }
+
+  /**
+   * Send usage limit warning notification
+   * @param limitType - Type of limit being approached
+   * @param remaining - Number remaining
+   */
+  async sendUsageLimitWarning(
+    limitType: 'trips' | 'documents' | 'insights',
+    remaining: number
+  ): Promise<string> {
+    const messages = {
+      trips: {
+        title: remaining > 0 ? 'Trip Limit Warning' : 'Trip Limit Reached',
+        body: remaining > 0
+          ? `You have ${remaining} free trip${remaining === 1 ? '' : 's'} remaining this month. Upgrade to Pro for unlimited trips.`
+          : 'You\'ve used all your free trips this month. Upgrade to Pro to keep tracking.',
+      },
+      documents: {
+        title: remaining > 0 ? 'Document Limit Warning' : 'Document Limit Reached',
+        body: remaining > 0
+          ? `You have ${remaining} free document upload${remaining === 1 ? '' : 's'} remaining. Upgrade for unlimited AI scanning.`
+          : 'You\'ve reached your document upload limit. Upgrade to Pro for unlimited uploads.',
+      },
+      insights: {
+        title: remaining > 0 ? 'AI Insights Running Low' : 'AI Insights Limit Reached',
+        body: remaining > 0
+          ? `${remaining} AI insight${remaining === 1 ? '' : 's'} remaining. Upgrade to Premium for unlimited insights.`
+          : 'You\'ve used all your AI insights. Upgrade to Premium for unlimited AI-powered analysis.',
+      },
+    };
+
+    const { title, body } = messages[limitType];
+
+    return this.sendLocalNotification(title, body, {
+      type: 'usage_warning',
+      limitType,
+      remaining,
+    });
+  }
+
+  /**
+   * Send payment success notification
+   */
+  async sendPaymentSuccessNotification(tier: string): Promise<string> {
+    return this.sendLocalNotification(
+      'Welcome to RoadLedger ' + tier.charAt(0).toUpperCase() + tier.slice(1) + '!',
+      'Your subscription is now active. Enjoy unlimited features!',
+      { type: 'payment_success', tier }
+    );
+  }
+
+  /**
+   * Send payment failed notification
+   */
+  async sendPaymentFailedNotification(): Promise<string> {
+    return this.sendLocalNotification(
+      'Payment Issue',
+      'We couldn\'t process your payment. Please update your payment method to continue your subscription.',
+      { type: 'payment_failed', action: 'update_payment' }
+    );
+  }
 }
 
 export const notificationService = new NotificationService();

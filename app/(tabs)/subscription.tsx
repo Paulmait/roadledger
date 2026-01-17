@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import {
@@ -18,6 +19,7 @@ import {
 } from '@/constants/pricing';
 import { subscriptionService, type SubscriptionStatus } from '@/services/subscription/subscriptionService';
 import { analytics } from '@/services/analytics/analyticsService';
+import { useUsageLimits } from '@/hooks/useUsageLimits';
 
 const COLORS = {
   primary: '#1E3A5F',
@@ -36,6 +38,7 @@ export default function SubscriptionScreen() {
   const [purchasing, setPurchasing] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('yearly');
   const [currentSubscription, setCurrentSubscription] = useState<SubscriptionStatus | null>(null);
+  const { usage, manageSubscription, isFreeTier } = useUsageLimits();
 
   useEffect(() => {
     loadSubscriptionStatus();
@@ -282,10 +285,41 @@ export default function SubscriptionScreen() {
         )}
       </View>
 
+      {/* Current Usage (Free tier only) */}
+      {isFreeTier && usage && (
+        <View style={styles.usageSection}>
+          <Text style={styles.usageSectionTitle}>Your Usage This Month</Text>
+          <View style={styles.usageRow}>
+            <View style={styles.usageItem}>
+              <Text style={styles.usageLabel}>Trips</Text>
+              <Text style={styles.usageValue}>
+                {usage.trips.used} / {usage.trips.limit}
+              </Text>
+            </View>
+            <View style={styles.usageItem}>
+              <Text style={styles.usageLabel}>Documents</Text>
+              <Text style={styles.usageValue}>
+                {usage.documents.used} / {usage.documents.limit}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.usageReset}>
+            Resets in {usage.daysUntilReset} day{usage.daysUntilReset !== 1 ? 's' : ''}
+          </Text>
+        </View>
+      )}
+
       {/* Restore Purchases */}
       <TouchableOpacity style={styles.restoreButton} onPress={handleRestore}>
         <Text style={styles.restoreButtonText}>Restore Purchases</Text>
       </TouchableOpacity>
+
+      {/* Manage Subscription (One-Click Cancellation - Legal Requirement) */}
+      {!isFreeTier && (
+        <TouchableOpacity style={styles.manageButton} onPress={manageSubscription}>
+          <Text style={styles.manageButtonText}>Manage Subscription</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Terms */}
       <Text style={styles.terms}>
@@ -480,11 +514,58 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  usageSection: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  usageSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  usageRow: {
+    flexDirection: 'row',
+    gap: 24,
+  },
+  usageItem: {
+    flex: 1,
+  },
+  usageLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  usageValue: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  usageReset: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 12,
+    textAlign: 'center',
+  },
   restoreButton: {
     padding: 16,
     alignItems: 'center',
   },
   restoreButtonText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+  },
+  manageButton: {
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.surfaceLight,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  manageButtonText: {
     color: COLORS.textSecondary,
     fontSize: 14,
   },

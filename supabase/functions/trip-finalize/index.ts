@@ -7,6 +7,7 @@ import {
   isValidUuid,
   safeErrorResponse,
   sanitizeForLog,
+  checkTierLimit,
 } from '../_shared/validation.ts';
 
 const corsHeaders = {
