@@ -37,6 +37,10 @@
           "fetch",
           "processing"
         ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.roadledger.app.sync",
+          "com.roadledger.app.refresh"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
