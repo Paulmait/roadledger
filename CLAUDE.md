@@ -1,9 +1,21 @@
 # RoadLedger Development Guide
 
-**Last Updated:** January 16, 2026
-**Target Launch:** January 16, 2026
+**Last Updated:** January 17, 2026
+**Target Launch:** January 17, 2026
 **Version:** 1.0.0
-**Status:** PRODUCTION READY - Security Hardened
+**Status:** PRODUCTION READY - Awaiting App Store Submission
+
+## App Store Connect
+
+- **App Name:** RoadLedger Pro
+- **App ID:** 6757956056
+- **Bundle ID:** com.roadledger.app
+- **Latest Build:** c938d5e8-56c7-4461-b066-a7aa1c53d7bd
+
+### Legal Pages (GitHub Pages)
+- **Privacy Policy:** https://paulmait.github.io/roadledger/privacy.html
+- **Terms of Service:** https://paulmait.github.io/roadledger/terms.html
+- **Landing Page:** https://paulmait.github.io/roadledger/
 
 ## Project Overview
 
@@ -274,13 +286,22 @@ All assets are in `assets/appstore/`:
 | Asset | File | Size |
 |-------|------|------|
 | App Icon | AppIcon-1024x1024.png | 1024x1024 |
-| iPhone 6.5" (5) | iPhone-6.5-*.png | 1284x2778 |
-| iPhone 5.5" (5) | iPhone-5.5-*.png | 1242x2208 |
-| iPad 12.9" (1) | iPad-12.9-*.png | 2048x2732 |
+| iPhone 6.7" (9) | screenshots/screenshot-*.png | 1284x2778 |
+
+### Screenshots (9 total - 1284x2778px)
+1. `screenshot-01` - Login screen
+2. `screenshot-02` - Dashboard with profit overview
+3. `screenshot-03` - Dashboard with quick actions
+4. `screenshot-04` - Transactions screen
+5. `screenshot-05` - Add transaction modal
+6. `screenshot-06` - Load calculator
+7. `screenshot-07` - Trip tracking
+8. `screenshot-08` - IFTA summary with quarter selector
+9. `screenshot-09` - Reports & Exports
 
 **Full submission guide:** See `APP_STORE_SUBMISSION.md`
 
-## Remaining Tasks for Launch (Jan 16, 2026)
+## Remaining Tasks for Launch (Jan 17, 2026)
 
 ### High Priority
 - [x] Create App Store screenshots and icon
@@ -291,7 +312,10 @@ All assets are in `assets/appstore/`:
 - [x] Wire export generation to IFTA/tax edge functions
 - [x] Fix app startup crash (resilient initialization)
 - [x] Fix pricing display ($14.99/$29.99 now showing correctly)
-- [ ] Upload build to App Store Connect
+- [x] Create GitHub Pages legal documents (Privacy Policy, Terms of Service)
+- [x] Resize screenshots to App Store dimensions (1284x2778px)
+- [x] Production build completed (c938d5e8-56c7-4461-b066-a7aa1c53d7bd)
+- [ ] Submit build to App Store Connect (run: `eas submit --platform ios --latest`)
 - [ ] Final end-to-end testing on physical devices
 
 ### Medium Priority
@@ -549,7 +573,25 @@ CREATE TABLE maintenance_reminders (
 
 ---
 
-## Recent Changes (Jan 16, 2026)
+## Recent Changes (Jan 17, 2026)
+
+### App Store Submission Preparation
+1. **App Name:** RoadLedger Pro (original "RoadLedger" was taken)
+2. **ASC App ID:** 6757956056 configured in eas.json
+3. **Production Build:** c938d5e8-56c7-4461-b066-a7aa1c53d7bd ready for submission
+4. **GitHub Pages:** Legal documents deployed at paulmait.github.io/roadledger/
+   - Privacy Policy (GDPR/CCPA compliant)
+   - Terms of Service with subscription pricing
+   - Landing page with feature overview
+5. **Screenshots Resized:** 9 screenshots converted from 1125x2436 to 1284x2778px
+
+### CI Fixes
+1. **Security Audit:** Fixed tar package vulnerability (GHSA-8qq5-rm4j-mr97)
+2. **Build Expo App:** Fixed react-native-get-random-values version mismatch
+
+---
+
+## Previous Changes (Jan 16, 2026)
 
 ### Critical Bug Fixes
 1. **App Startup Crash Fixed** - Made initialization more resilient
