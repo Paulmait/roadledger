@@ -149,13 +149,7 @@ export default function TabsLayout() {
           headerShown: false,
         }}
       />
-      <Tabs.Screen
-        name="dev"
-        options={{
-          href: null, // Hide from tab bar - dev only
-          headerShown: false,
-        }}
-      />
+      {/* Dev screen completely removed from production routing for App Store compliance (guideline 2.3.1a) */}
     </Tabs>
   );
 }

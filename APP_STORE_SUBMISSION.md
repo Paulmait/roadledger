@@ -1,12 +1,16 @@
-# RoadLedger - Apple App Store Submission Guide
+# RoadLedger Pro - Apple App Store Submission Guide
+
+**Last Updated:** January 20, 2026
+**Status:** Resubmission after addressing 2.1 rejection
 
 ## App Information
 
 | Field | Value |
 |-------|-------|
-| **App Name** | RoadLedger |
+| **App Name** | RoadLedger Pro |
+| **App ID** | 6757956056 |
 | **Subtitle** | Profit-First Trucking App |
-| **Bundle ID** | com.cienrios.roadledger |
+| **Bundle ID** | com.roadledger.app |
 | **SKU** | roadledger-ios-2026 |
 | **Primary Language** | English (US) |
 | **Category** | Business |
@@ -20,8 +24,9 @@
 | **Address** | 17113 Miramar Parkway, Miramar, FL 33027 |
 | **Phone** | (754) 254-7141 |
 | **Support Email** | support@cienrios.com |
-| **Marketing URL** | https://roadledger.app |
-| **Privacy Policy URL** | https://roadledger.app/privacy |
+| **Marketing URL** | https://paulmait.github.io/roadledger/ |
+| **Privacy Policy URL** | https://paulmait.github.io/roadledger/privacy.html |
+| **Terms of Service URL** | https://paulmait.github.io/roadledger/terms.html |
 
 ## App Store Assets
 
@@ -115,14 +120,14 @@ Initial release of RoadLedger - the profit-first app for owner-operators.
 
 ## In-App Purchases
 
-### Subscription Products
+### Subscription Products (UPDATED January 17, 2026)
 
 | Product ID | Name | Price | Duration |
 |------------|------|-------|----------|
-| com.roadledger.pro.monthly | RoadLedger Pro | $9.99 | 1 month |
-| com.roadledger.pro.yearly | RoadLedger Pro (Annual) | $79.99 | 1 year |
-| com.roadledger.premium.monthly | RoadLedger Premium | $19.99 | 1 month |
-| com.roadledger.premium.yearly | RoadLedger Premium (Annual) | $149.99 | 1 year |
+| com.roadledger.pro.monthly | RoadLedger Pro | $14.99 | 1 month |
+| com.roadledger.pro.yearly | RoadLedger Pro (Annual) | $119.99 | 1 year |
+| com.roadledger.premium.monthly | RoadLedger Premium | $29.99 | 1 month |
+| com.roadledger.premium.yearly | RoadLedger Premium (Annual) | $239.99 | 1 year |
 
 ### Subscription Group
 - **Group Name:** RoadLedger Subscriptions
@@ -130,26 +135,93 @@ Initial release of RoadLedger - the profit-first app for owner-operators.
 
 ## App Review Information
 
-### Demo Account
+### Demo Account (UPDATED January 20, 2026)
 ```
-Email: demo@roadledger.app
-Password: DemoAccount2026!
+Email: roadledger.demo.review@gmail.com
+Password: sWuQiL3MoRkPCmGAxAUx!Aa1
 ```
+
+**Account Status:**
+- Email confirmed: Yes
+- Subscription tier: Premium (active until 2028)
+- Full access to all features
 
 ### Notes for Reviewer
 ```
-RoadLedger is a mileage and expense tracking app for professional truck drivers (owner-operators).
+RoadLedger Pro is a comprehensive profit-tracking and compliance app for owner-operator truck drivers.
 
-Key testing areas:
-1. Trip Tracking: Start a trip, drive, end trip - see mileage recorded
-2. Documents: Upload a receipt image - AI extracts data
-3. Load Calculator: Enter load details - see profitability analysis
-4. Subscriptions: Test in-app purchases (sandbox)
+DEMO ACCOUNT ACCESS:
+The demo account has PREMIUM tier access to test ALL features without restrictions.
 
-The app requires location permissions for GPS tracking.
-The app works offline and syncs when online.
+HOW TO TEST EACH FEATURE:
+
+1. DASHBOARD (Home Tab)
+   - View profit overview and recent activity
+   - Tap "Quick Actions" for common tasks
+   - See AI-powered insights and suggestions
+
+2. TRIP TRACKING (Trip Tab)
+   - Tap "Start Trip" to begin GPS tracking
+   - Grant location permissions when prompted
+   - The app tracks miles by state for IFTA compliance
+   - Tap "End Trip" to finalize (calculates jurisdiction miles)
+   - Note: GPS tracking works best on physical device
+
+3. LOAD CALCULATOR (Calculator Tab)
+   - Enter load details: rate, miles, deadhead
+   - See instant profitability analysis
+   - Compare to industry benchmarks
+   - Get clear verdict: EXCELLENT / GOOD / MARGINAL / BAD
+
+4. DOCUMENTS (Documents Tab)
+   - Tap "+" to add a new document
+   - Select "Camera" to capture receipt/settlement
+   - AI automatically extracts: vendor, date, amount, category
+   - Review and save the transaction
+
+5. TRANSACTIONS (Money Tab)
+   - View all income and expenses
+   - Add manual transactions
+   - See profit calculations
+
+6. EXPORTS (Exports Tab)
+   - Generate IFTA quarterly reports
+   - Export tax summaries
+   - Download reports in PDF format
+
+7. SUBSCRIPTION (Settings > Subscription)
+   - View current plan and features
+   - "Restore Purchases" button available
+   - "Manage Subscription" links to App Store
+   - Clear pricing and renewal terms displayed
+
+8. ACCOUNT DELETION (Settings > Privacy Settings)
+   - "Delete My Account" button available
+   - Shows 30-day processing timeline
+   - Complies with Apple guideline 5.1.1(v)
+
+9. PRIVACY & LEGAL (Settings > Legal)
+   - Privacy Policy accessible
+   - Terms of Service accessible
+   - All data handling disclosed
+
+TECHNICAL NOTES:
+- App requires iOS 15.1 or later
+- Location permission required for trip tracking
+- Camera permission required for document scanning
+- Works offline with automatic sync when online
+- All subscriptions use Apple's StoreKit 2
+
+SUBSCRIPTION PRICING:
+- Pro Monthly: $14.99/month
+- Pro Yearly: $119.99/year (save 33%)
+- Premium Monthly: $29.99/month
+- Premium Yearly: $239.99/year (save 33%)
+
+Free tier includes: 5 trips/month, 3 documents/month
 
 Contact: support@cienrios.com
+Phone: (754) 254-7141
 ```
 
 ## Content Rights
@@ -189,7 +261,7 @@ Contact: support@cienrios.com
 - Usage Data
 
 ### Privacy Policy URL
-https://roadledger.app/privacy
+https://paulmait.github.io/roadledger/privacy.html
 
 ## Export Compliance
 

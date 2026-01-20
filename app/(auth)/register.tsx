@@ -10,21 +10,35 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { Logo } from '@/components/Logo';
+
+// Legal document URLs
+const PRIVACY_POLICY_URL = 'https://paulmait.github.io/roadledger/privacy.html';
+const TERMS_OF_SERVICE_URL = 'https://paulmait.github.io/roadledger/terms.html';
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const signUp = useAuthStore((state) => state.signUp);
   const isLoading = useAuthStore((state) => state.isLoading);
   const error = useAuthStore((state) => state.error);
   const clearError = useAuthStore((state) => state.clearError);
+
+  const openPrivacyPolicy = () => {
+    Linking.openURL(PRIVACY_POLICY_URL);
+  };
+
+  const openTermsOfService = () => {
+    Linking.openURL(TERMS_OF_SERVICE_URL);
+  };
 
   const handleRegister = async () => {
     if (!email.trim() || !password.trim()) {
@@ -39,6 +53,11 @@ export default function RegisterScreen() {
 
     if (password.length < 6) {
       Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    if (!acceptedTerms) {
+      Alert.alert('Error', 'Please accept the Terms of Service and Privacy Policy to continue');
       return;
     }
 
@@ -126,6 +145,30 @@ export default function RegisterScreen() {
               />
             </View>
 
+            {/* Terms and Privacy Policy Acceptance - Required for App Store compliance */}
+            <TouchableOpacity
+              style={styles.termsContainer}
+              onPress={() => setAcceptedTerms(!acceptedTerms)}
+              activeOpacity={0.7}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: acceptedTerms }}
+              accessibilityLabel="Accept Terms of Service and Privacy Policy"
+            >
+              <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+                {acceptedTerms && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={styles.termsText}>
+                I agree to the{' '}
+                <Text style={styles.termsLink} onPress={openTermsOfService}>
+                  Terms of Service
+                </Text>
+                {' '}and{' '}
+                <Text style={styles.termsLink} onPress={openPrivacyPolicy}>
+                  Privacy Policy
+                </Text>
+              </Text>
+            </TouchableOpacity>
+
             {error && (
               <View style={styles.errorContainer}>
                 <Text style={styles.errorText}>{error}</Text>
@@ -133,9 +176,9 @@ export default function RegisterScreen() {
             )}
 
             <TouchableOpacity
-              style={[styles.button, isLoading && styles.buttonDisabled]}
+              style={[styles.button, (isLoading || !acceptedTerms) && styles.buttonDisabled]}
               onPress={handleRegister}
-              disabled={isLoading}
+              disabled={isLoading || !acceptedTerms}
             >
               {isLoading ? (
                 <ActivityIndicator color="#fff" />
@@ -248,5 +291,42 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     textAlign: 'center',
+  },
+  termsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#4f46e5',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    marginTop: 2,
+  },
+  checkboxChecked: {
+    backgroundColor: '#4f46e5',
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  termsText: {
+    flex: 1,
+    color: '#888',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: '#4f46e5',
+    textDecorationLine: 'underline',
   },
 });

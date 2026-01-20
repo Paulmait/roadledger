@@ -9,12 +9,17 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { biometricService, type BiometricCapabilities } from '@/services/auth/biometricService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Logo } from '@/components/Logo';
+
+// Legal document URLs
+const PRIVACY_POLICY_URL = 'https://paulmait.github.io/roadledger/privacy.html';
+const TERMS_OF_SERVICE_URL = 'https://paulmait.github.io/roadledger/terms.html';
 
 const STORED_EMAIL_KEY = 'last_logged_in_email';
 
@@ -174,6 +179,17 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </Link>
           </View>
+
+          {/* Legal links for App Store compliance */}
+          <View style={styles.legalLinks}>
+            <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
+              <Text style={styles.legalLink}>Privacy Policy</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalSeparator}>•</Text>
+            <TouchableOpacity onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}>
+              <Text style={styles.legalLink}>Terms of Service</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -294,5 +310,23 @@ const styles = StyleSheet.create({
     color: '#4f46e5',
     fontSize: 16,
     fontWeight: '600',
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#2d2d44',
+  },
+  legalLink: {
+    color: '#666',
+    fontSize: 12,
+  },
+  legalSeparator: {
+    color: '#666',
+    fontSize: 12,
+    marginHorizontal: 8,
   },
 });
