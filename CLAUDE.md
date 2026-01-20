@@ -1,16 +1,21 @@
 # RoadLedger Development Guide
 
-**Last Updated:** January 17, 2026
-**Target Launch:** January 17, 2026
-**Version:** 1.0.0
-**Status:** PRODUCTION READY - Awaiting App Store Submission
+**Last Updated:** January 20, 2026
+**Target Launch:** January 20, 2026
+**Version:** 1.0.0 (Build 2)
+**Status:** SUBMITTED TO APP STORE - Awaiting Review
 
 ## App Store Connect
 
 - **App Name:** RoadLedger Pro
 - **App ID:** 6757956056
 - **Bundle ID:** com.roadledger.app
-- **Latest Build:** c938d5e8-56c7-4461-b066-a7aa1c53d7bd
+- **Latest Build:** 1c176f7f-2e21-435f-b9e6-79425e16882f (Build 2)
+
+### Demo Account (For Apple Review)
+- **Email:** roadledger.demo.review@gmail.com
+- **Password:** sWuQiL3MoRkPCmGAxAUx!Aa1
+- **Tier:** Premium (active until 2028)
 
 ### Legal Pages (GitHub Pages)
 - **Privacy Policy:** https://paulmait.github.io/roadledger/privacy.html
@@ -573,7 +578,47 @@ CREATE TABLE maintenance_reminders (
 
 ---
 
-## Recent Changes (Jan 17, 2026)
+## Recent Changes (Jan 20, 2026)
+
+### App Store 2.1 Rejection Fix
+Apple rejected the initial submission for guideline 2.1 (Performance: App Completeness) - missing demo account password. Fixed with:
+
+1. **Demo Account Created** - Full working demo for Apple reviewers
+   - Email: roadledger.demo.review@gmail.com
+   - Premium tier access (active until 2028)
+   - Email confirmed via database migration
+
+2. **Hidden Features Removed (Guideline 2.3.1a)**
+   - Removed `dev.tsx` from production routing
+   - Dev screen renamed to `_dev.tsx.bak` (not routable)
+   - No hidden/undocumented features accessible
+
+3. **Legal Compliance Enhanced (Guideline 5.1.1)**
+   - Added Terms of Service acceptance checkbox at registration
+   - Added Privacy Policy & Terms links to login screen
+   - Users must accept terms before creating account
+
+4. **New Build Submitted**
+   - Build ID: 1c176f7f-2e21-435f-b9e6-79425e16882f
+   - Version: 1.0.0 (Build 2)
+   - Auto-submitted to App Store Connect via EAS
+
+### Database Fixes
+- Fixed migration history (repaired 00014, 00015)
+- Created migration 00015 to fix lint errors in rate limit functions
+- All 8 Edge Functions verified ACTIVE
+
+### Files Changed
+- `app/(tabs)/_layout.tsx` - Removed dev screen from routing
+- `app/(tabs)/_dev.tsx.bak` - Renamed from dev.tsx
+- `app/(auth)/register.tsx` - Added terms acceptance checkbox
+- `app/(auth)/login.tsx` - Added legal links
+- `APP_STORE_SUBMISSION.md` - Updated credentials and review notes
+- `app.json` - Incremented buildNumber to 2
+
+---
+
+## Previous Changes (Jan 17, 2026)
 
 ### App Store Submission Preparation
 1. **App Name:** RoadLedger Pro (original "RoadLedger" was taken)
