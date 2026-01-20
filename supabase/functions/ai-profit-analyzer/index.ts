@@ -82,6 +82,30 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Check rate limit
+    const { data: rateLimitOk } = await supabase.rpc('check_function_rate_limit', {
+      p_user_id: user.id,
+      p_function_name: 'ai-profit-analyzer',
+      p_max_per_minute: 10,
+      p_max_per_hour: 60,
+    });
+
+    if (rateLimitOk === false) {
+      console.warn(`Rate limit exceeded for user ${user.id} on ai-profit-analyzer`);
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Record function invocation
+    await supabase.from('function_invocations').insert({
+      user_id: user.id,
+      function_name: 'ai-profit-analyzer',
+      invoked_at: new Date().toISOString(),
+    });
+
     const body: RequestBody = await req.json();
 
     // Calculate date range

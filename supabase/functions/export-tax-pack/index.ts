@@ -57,6 +57,29 @@ serve(async (req) => {
     // Use service role for data access
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Check rate limit
+    const { data: rateLimitOk } = await supabase.rpc('check_function_rate_limit', {
+      p_user_id: user.id,
+      p_function_name: 'export-tax-pack',
+      p_max_per_minute: 5,
+      p_max_per_hour: 20,
+    });
+
+    if (rateLimitOk === false) {
+      console.warn(`Rate limit exceeded for user ${user.id} on export-tax-pack`);
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Record function invocation
+    await supabase.from('function_invocations').insert({
+      user_id: user.id,
+      function_name: 'export-tax-pack',
+      invoked_at: new Date().toISOString(),
+    });
+
     // Parse request body
     const body: RequestBody = await req.json();
 
@@ -161,6 +184,10 @@ serve(async (req) => {
 
     if (exportError) {
       console.error('Export record error:', exportError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to create export record' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     return new Response(
