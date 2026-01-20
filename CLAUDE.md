@@ -14,7 +14,7 @@
 
 ### Demo Account (For Apple Review)
 - **Email:** roadledger.demo.review@gmail.com
-- **Password:** sWuQiL3MoRkPCmGAxAUx!Aa1
+- **Password:** See `DEMO_CREDENTIALS.md` (gitignored)
 - **Tier:** Premium (active until 2028)
 
 ### Legal Pages (GitHub Pages)

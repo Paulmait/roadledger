@@ -138,13 +138,15 @@ Initial release of RoadLedger - the profit-first app for owner-operators.
 ### Demo Account (UPDATED January 20, 2026)
 ```
 Email: roadledger.demo.review@gmail.com
-Password: sWuQiL3MoRkPCmGAxAUx!Aa1
+Password: [See DEMO_CREDENTIALS.md - gitignored for security]
 ```
 
 **Account Status:**
 - Email confirmed: Yes
 - Subscription tier: Premium (active until 2028)
 - Full access to all features
+
+> **Note:** Full credentials are in `DEMO_CREDENTIALS.md` which is gitignored for security.
 
 ### Notes for Reviewer
 ```

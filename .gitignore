@@ -44,6 +44,11 @@ secrets/
 *credentials*.json
 serviceAccountKey.json
 
+# Demo/Review Credentials (NEVER COMMIT)
+DEMO_CREDENTIALS.md
+.demo-credentials
+APP_STORE_CREDENTIALS.md
+
 # Supabase
 supabase/.temp/
 supabase/.branches/
